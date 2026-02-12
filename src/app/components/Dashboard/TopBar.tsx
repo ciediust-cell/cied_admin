@@ -1,0 +1,41 @@
+import { LogOut, User } from "lucide-react";
+
+export function TopBar() {
+  const handleLogout = () => {
+    console.log("Logout clicked");
+    // Mock logout logic
+  };
+
+  return (
+    <div className="h-16 px-6 flex items-center justify-between">
+      {/* Page Title */}
+      <div>
+        <h2 className="text-foreground">Dashboard</h2>
+      </div>
+
+      {/* Admin Profile and Logout */}
+      <div className="flex items-center gap-4">
+        {/* Admin Profile */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+            <User className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div className="text-sm">
+            <p className="text-foreground">Admin User</p>
+            <p className="text-muted-foreground text-xs">admin@cms.com</p>
+          </div>
+        </div>
+
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+          title="Logout"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Logout</span>
+        </button>
+      </div>
+    </div>
+  );
+}
