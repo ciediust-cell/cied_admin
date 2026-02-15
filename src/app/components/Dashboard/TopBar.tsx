@@ -1,9 +1,14 @@
 import { LogOut, User } from "lucide-react";
+import { useAuthStore } from "../../../store/authStore";
+import { useNavigate } from "react-router-dom";
 
 export function TopBar() {
+  const logout = useAuthStore((state) => state.logout);
+  const navigate = useNavigate();
+
   const handleLogout = () => {
-    console.log("Logout clicked");
-    // Mock logout logic
+    logout(); // clear Zustand + localStorage
+    navigate("/login"); // redirect
   };
 
   return (

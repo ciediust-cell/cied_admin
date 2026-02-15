@@ -1,97 +1,196 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Upload, X, Save, ArrowLeft, Image as ImageIcon, Calendar, Clock, MapPin, Link as LinkIcon, Users } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  X,
+  Save,
+  ArrowLeft,
+  Image as ImageIcon,
+  Calendar,
+  Clock,
+  MapPin,
+  Link as LinkIcon,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
 
 interface EventFormPageProps {
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
 }
 
 export default function EventsFormPage({ mode }: EventFormPageProps) {
   const navigate = useNavigate();
-  const params = useParams();
-  const resolvedEventId = params.eventId ? Number(params.eventId) : undefined;
-  const [title, setTitle] = useState(
-    mode === 'edit' ? 'Annual Day Celebration 2026' : ''
-  );
-  const [description, setDescription] = useState(
-    mode === 'edit'
-      ? 'Join us for our grand annual day celebration featuring cultural performances, awards ceremony, and student achievements showcase.'
-      : ''
-  );
-  const [eventDate, setEventDate] = useState(
-    mode === 'edit' ? '2026-02-28' : ''
-  );
-  const [eventTime, setEventTime] = useState(
-    mode === 'edit' ? '10:00' : ''
-  );
-  const [location, setLocation] = useState(
-    mode === 'edit' ? 'Main Auditorium' : ''
-  );
-  const [attendees, setAttendees] = useState(
-    mode === 'edit' ? '500' : ''
-  );
-  const [registrationLink, setRegistrationLink] = useState(
-    mode === 'edit' ? 'https://example.com/register/annual-day-2026' : ''
-  );
-  const [isPublished, setIsPublished] = useState(mode === 'edit' ? true : false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(
-    mode === 'edit' ? 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800' : null
-  );
+  const { eventId } = useParams();
+  const { accessToken } = useAuthStore();
+
+  const [loading, setLoading] = useState(false);
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [location, setLocation] = useState("");
+  const [registrationUrl, setRegistrationUrl] = useState("");
+  const [isPublished, setIsPublished] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+
+  // ✅ Fetch event for edit mode
+  useEffect(() => {
+    if (mode !== "edit" || !eventId || !accessToken) return;
+
+    const fetchEvent = async () => {
+      try {
+        setLoading(true);
+
+        const res = await fetch(
+          `http://localhost:4000/api/admin/events/${eventId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        if (!res.ok) throw new Error();
+
+        const existing = await res.json();
+
+        setTitle(existing.title);
+        setDescription(existing.description || "");
+        setLocation(existing.location || "");
+        setIsPublished(existing.isPublished);
+        setUploadedImage(existing.featuredImage || null);
+
+        if (existing.eventDate) {
+          const dateObj = new Date(existing.eventDate);
+          setEventDate(dateObj.toISOString().split("T")[0]);
+          setEventTime(dateObj.toISOString().split("T")[1]?.slice(0, 5));
+        }
+
+        setRegistrationUrl(existing.registrationUrl || "");
+      } catch {
+        toast.error("Failed to load event");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvent();
+  }, [mode, eventId, accessToken]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    setImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleRemoveImage = () => {
+    setImageFile(null);
     setUploadedImage(null);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  // ✅ Save (Create / Update)
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving event:', { 
-      title, 
-      description, 
-      eventDate, 
-      eventTime, 
-      location, 
-      attendees,
-      registrationLink,
-      isPublished, 
-      uploadedImage,
-      eventId: resolvedEventId
-    });
-    // Mock save logic
-    alert(`Event ${mode === 'create' ? 'created' : 'updated'} successfully!`);
-    navigate('/dashboard/events');
+
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+
+    if (!eventDate || !eventTime) {
+      toast.error("Please select both date and time.");
+      return;
+    }
+
+    if (mode === "create" && !imageFile) {
+      toast.error("Event image is required.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("description", description);
+      formData.append(
+        "eventDate",
+        new Date(`${eventDate}T${eventTime}`).toISOString(),
+      );
+      formData.append("isPublished", String(isPublished));
+
+      if (location.trim()) formData.append("location", location.trim());
+      if (registrationUrl.trim())
+        formData.append("registrationUrl", registrationUrl.trim());
+      if (imageFile) formData.append("image", imageFile);
+
+      const url =
+        mode === "create"
+          ? "http://localhost:4000/api/admin/events"
+          : `http://localhost:4000/api/admin/events/${eventId}`;
+
+      const method = mode === "create" ? "POST" : "PUT";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Request failed");
+      }
+
+      toast.success(
+        mode === "create"
+          ? "Event created successfully"
+          : "Event updated successfully",
+      );
+
+      navigate("/dashboard/events");
+    } catch (error: any) {
+      toast.error(
+        error?.message || (mode === "create" ? "Create failed" : "Update failed"),
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="p-8">
-      {/* Page Header */}
+      {/* Header */}
       <div className="mb-8">
         <button
-          onClick={() => navigate('/dashboard/events')}
+          onClick={() => navigate("/dashboard/events")}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Events List
         </button>
         <h1 className="text-foreground mb-2">
-          {mode === 'create' ? 'Create New Event' : 'Edit Event'}
+          {mode === "create" ? "Create New Event" : "Edit Event"}
         </h1>
         <p className="text-muted-foreground">
-          {mode === 'create'
-            ? 'Add a new event to your institutional calendar'
-            : 'Update the event details'}
+          {mode === "create"
+            ? "Add a new event to your institutional calendar"
+            : "Update the event details"}
         </p>
       </div>
+
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Processing...</p>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSave}>
@@ -116,7 +215,10 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
 
             {/* Description Field */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <label htmlFor="description" className="block text-foreground mb-2">
+              <label
+                htmlFor="description"
+                className="block text-foreground mb-2"
+              >
                 Description <span className="text-destructive">*</span>
               </label>
               <textarea
@@ -139,7 +241,10 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Date */}
                 <div>
-                  <label htmlFor="eventDate" className="block text-foreground mb-2">
+                  <label
+                    htmlFor="eventDate"
+                    className="block text-foreground mb-2"
+                  >
                     Date <span className="text-destructive">*</span>
                   </label>
                   <div className="relative">
@@ -157,7 +262,10 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
 
                 {/* Time */}
                 <div>
-                  <label htmlFor="eventTime" className="block text-foreground mb-2">
+                  <label
+                    htmlFor="eventTime"
+                    className="block text-foreground mb-2"
+                  >
                     Time <span className="text-destructive">*</span>
                   </label>
                   <div className="relative">
@@ -178,7 +286,7 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
             {/* Location */}
             <div className="bg-card border border-border rounded-lg p-6">
               <label htmlFor="location" className="block text-foreground mb-2">
-                Location <span className="text-destructive">*</span>
+                Location
               </label>
               <div className="relative">
                 <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -188,7 +296,6 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g., Main Auditorium, Sports Ground"
-                  required
                   className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
                 />
               </div>
@@ -198,36 +305,24 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Additional Details</h3>
               <div className="space-y-4">
-                {/* Expected Attendees */}
-                <div>
-                  <label htmlFor="attendees" className="block text-foreground mb-2">
-                    Expected Attendees
-                  </label>
-                  <div className="relative">
-                    <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      id="attendees"
-                      type="number"
-                      value={attendees}
-                      onChange={(e) => setAttendees(e.target.value)}
-                      placeholder="e.g., 500"
-                      className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-                    />
-                  </div>
-                </div>
-
                 {/* Registration Link */}
                 <div>
-                  <label htmlFor="registrationLink" className="block text-foreground mb-2">
-                    Registration Link <span className="text-muted-foreground text-sm">(Optional)</span>
+                  <label
+                    htmlFor="registrationUrl"
+                    className="block text-foreground mb-2"
+                  >
+                    Registration Link{" "}
+                    <span className="text-muted-foreground text-sm">
+                      (Optional)
+                    </span>
                   </label>
                   <div className="relative">
                     <LinkIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
-                      id="registrationLink"
+                      id="registrationUrl"
                       type="url"
-                      value={registrationLink}
-                      onChange={(e) => setRegistrationLink(e.target.value)}
+                      value={registrationUrl}
+                      onChange={(e) => setRegistrationUrl(e.target.value)}
                       placeholder="https://example.com/register"
                       className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
                     />
@@ -245,26 +340,26 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
             {/* Publish Settings */}
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Publish Settings</h3>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-foreground text-sm mb-1">Status</p>
                   <p className="text-muted-foreground text-xs">
-                    {isPublished ? 'Visible to public' : 'Hidden from public'}
+                    {isPublished ? "Visible to public" : "Hidden from public"}
                   </p>
                 </div>
-                
+
                 {/* Toggle Switch */}
                 <button
                   type="button"
                   onClick={() => setIsPublished(!isPublished)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isPublished ? 'bg-primary' : 'bg-switch-background'
+                    isPublished ? "bg-primary" : "bg-switch-background"
                   }`}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isPublished ? 'translate-x-6' : 'translate-x-1'
+                      isPublished ? "translate-x-6" : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -284,7 +379,7 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
             {/* Event Image */}
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Event Image</h3>
-              
+
               {uploadedImage ? (
                 <div className="space-y-3">
                   <div className="relative rounded-lg overflow-hidden border border-border">
@@ -330,7 +425,7 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                   </div>
                 </label>
               )}
-              
+
               <p className="text-xs text-muted-foreground mt-3">
                 Recommended: 1200x630px (JPG, PNG)
               </p>
@@ -346,11 +441,11 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                     <div>
                       <p className="text-xs text-muted-foreground">Date</p>
                       <p className="text-sm text-foreground">
-                        {new Date(eventDate).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
+                        {new Date(eventDate).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
                         })}
                       </p>
                     </div>
@@ -360,11 +455,14 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                     <div>
                       <p className="text-xs text-muted-foreground">Time</p>
                       <p className="text-sm text-foreground">
-                        {new Date(`2000-01-01T${eventTime}`).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true,
-                        })}
+                        {new Date(`2000-01-01T${eventTime}`).toLocaleTimeString(
+                          "en-US",
+                          {
+                            hour: "numeric",
+                            minute: "2-digit",
+                            hour12: true,
+                          },
+                        )}
                       </p>
                     </div>
                   </div>
@@ -372,7 +470,9 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                     <div className="flex items-start gap-3">
                       <MapPin className="w-4 h-4 text-primary mt-0.5" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Location</p>
+                        <p className="text-xs text-muted-foreground">
+                          Location
+                        </p>
                         <p className="text-sm text-foreground">{location}</p>
                       </div>
                     </div>
@@ -388,12 +488,12 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
                 className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity"
               >
                 <Save className="w-4 h-4" />
-                {mode === 'create' ? 'Create Event' : 'Save Changes'}
+                {mode === "create" ? "Create Event" : "Save Changes"}
               </button>
-              
+
               <button
                 type="button"
-                onClick={() => navigate('/dashboard/events')}
+                onClick={() => navigate("/dashboard/events")}
                 className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors"
               >
                 Cancel

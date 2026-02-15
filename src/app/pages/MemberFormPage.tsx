@@ -1,80 +1,223 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Upload, X, Save, ArrowLeft, User } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
 
 interface MemberFormPageProps {
   mode: "create" | "edit";
 }
 
+type MemberRole = "GOVERNANCE" | "MANAGEMENT" | "MENTOR" | "ADVISOR";
+
+const ROLE_OPTIONS: { label: string; value: MemberRole }[] = [
+  { label: "Governance", value: "GOVERNANCE" },
+  { label: "Management", value: "MANAGEMENT" },
+  { label: "Mentor", value: "MENTOR" },
+  { label: "Advisor", value: "ADVISOR" },
+];
+
 export default function MemberFormPage({ mode }: MemberFormPageProps) {
   const navigate = useNavigate();
-  const params = useParams();
-  const resolvedMemberId = params.memberId ? Number(params.memberId) : undefined;
-  const [name, setName] = useState(mode === "edit" ? "Dr. Sarah Johnson" : "");
-  const [role, setRole] = useState(mode === "edit" ? "Principal" : "");
-  const [email, setEmail] = useState(
-    mode === "edit" ? "sarah.johnson@institution.edu" : "",
-  );
-  const [phone, setPhone] = useState(
-    mode === "edit" ? "+1 (555) 123-4567" : "",
-  );
-  const [department, setDepartment] = useState(
-    mode === "edit" ? "Administration" : "",
-  );
-  const [qualifications, setQualifications] = useState(
-    mode === "edit"
-      ? "Ph.D. in Educational Leadership, M.Ed. in Administration"
-      : "",
-  );
-  const [bio, setBio] = useState(
-    mode === "edit"
-      ? "Dr. Sarah Johnson has over 20 years of experience in educational leadership and has been serving as Principal since 2020."
-      : "",
-  );
-  const [isActive, setIsActive] = useState(mode === "edit" ? true : true);
-  const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(
-    mode === "edit"
-      ? "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop"
-      : null,
-  );
+  const { memberId } = useParams();
+  const { accessToken } = useAuthStore();
+
+  const [loading, setLoading] = useState(false);
+
+  const [name, setName] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [role, setRole] = useState<MemberRole>("MANAGEMENT");
+  const [department, setDepartment] = useState("");
+  const [email, setEmail] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [order, setOrder] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null);
+  const [currentImageUrl, setCurrentImageUrl] = useState("");
+  const [currentImagePublicId, setCurrentImagePublicId] = useState("");
+
+  useEffect(() => {
+    if (mode !== "edit" || !memberId || !accessToken) return;
+
+    const fetchMember = async () => {
+      try {
+        setLoading(true);
+
+        const res = await fetch(`http://localhost:4000/api/admin/members/${memberId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!res.ok) throw new Error();
+
+        const data = await res.json();
+
+        setName(data.name || "");
+        setDesignation(data.designation || "");
+        setRole(data.role || "MANAGEMENT");
+        setDepartment(data.department || "");
+        setEmail(data.email || "");
+        setLinkedinUrl(data.linkedinUrl || "");
+        setOrder(data.order?.toString() || "");
+        setIsActive(Boolean(data.isActive));
+        setCurrentImageUrl(data.imageUrl || "");
+        setCurrentImagePublicId(data.imagePublicId || "");
+        setUploadedPhoto(data.imageUrl || null);
+      } catch {
+        toast.error("Failed to load member");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMember();
+  }, [mode, memberId, accessToken]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedPhoto(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+
+    setImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedPhoto(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleRemovePhoto = () => {
-    setUploadedPhoto(null);
+    if (imageFile) {
+      setImageFile(null);
+      setUploadedPhoto(currentImageUrl || null);
+      return;
+    }
+
+    if (mode === "create") {
+      setUploadedPhoto(null);
+      return;
+    }
+
+    toast.error("Upload a new photo to replace the existing one.");
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Saving member:", {
-      name,
-      role,
-      email,
-      phone,
-      department,
-      qualifications,
-      bio,
-      isActive,
-      uploadedPhoto,
-      memberId: resolvedMemberId,
+  const uploadImage = async (file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const res = await fetch("http://localhost:4000/api/admin/upload/image", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
     });
-    // Mock save logic
-    alert(`Member ${mode === "create" ? "created" : "updated"} successfully!`);
-    navigate("/dashboard/members");
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.message || "Image upload failed");
+    }
+
+    const data = await res.json();
+    return {
+      imageUrl: data.imageUrl as string,
+      imagePublicId: data.publicId as string,
+    };
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+
+    if (!name.trim() || !designation.trim() || !role) {
+      toast.error("Please fill all required fields.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      let finalImageUrl = currentImageUrl;
+      let finalImagePublicId = currentImagePublicId;
+
+      if (imageFile) {
+        const uploaded = await uploadImage(imageFile);
+        finalImageUrl = uploaded.imageUrl;
+        finalImagePublicId = uploaded.imagePublicId;
+      }
+
+      if (mode === "create" && (!finalImageUrl || !finalImagePublicId)) {
+        toast.error("Profile photo is required.");
+        return;
+      }
+
+      const payload: Record<string, any> = {
+        name: name.trim(),
+        designation: designation.trim(),
+        role,
+        isActive,
+      };
+
+      if (department.trim()) payload.department = department.trim();
+      if (email.trim()) payload.email = email.trim();
+      if (linkedinUrl.trim()) payload.linkedinUrl = linkedinUrl.trim();
+
+      if (order.trim()) {
+        const parsedOrder = Number(order);
+        if (Number.isNaN(parsedOrder)) {
+          toast.error("Order must be a number.");
+          return;
+        }
+        payload.order = parsedOrder;
+      }
+
+      if (finalImageUrl && finalImagePublicId) {
+        payload.imageUrl = finalImageUrl;
+        payload.imagePublicId = finalImagePublicId;
+      }
+
+      const url =
+        mode === "create"
+          ? "http://localhost:4000/api/admin/members"
+          : `http://localhost:4000/api/admin/members/${memberId}`;
+      const method = mode === "create" ? "POST" : "PATCH";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Request failed");
+      }
+
+      toast.success(
+        mode === "create"
+          ? "Member created successfully"
+          : "Member updated successfully",
+      );
+      navigate("/dashboard/members");
+    } catch (error: any) {
+      toast.error(error?.message || (mode === "create" ? "Create failed" : "Update failed"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="p-8">
-      {/* Page Header */}
       <div className="mb-8">
         <button
           onClick={() => navigate("/dashboard/members")}
@@ -88,22 +231,22 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         </h1>
         <p className="text-muted-foreground">
           {mode === "create"
-            ? "Add a new faculty or staff member to your website"
-            : "Update the member details"}
+            ? "Add a new member to your website"
+            : "Update member details"}
         </p>
       </div>
 
-      {/* Form */}
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Processing...</p>
+      )}
+
       <form onSubmit={handleSave}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Basic Information */}
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Basic Information</h3>
 
               <div className="space-y-4">
-                {/* Name */}
                 <div>
                   <label htmlFor="name" className="block text-foreground mb-2">
                     Full Name <span className="text-destructive">*</span>
@@ -119,23 +262,43 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
                   />
                 </div>
 
-                {/* Role/Position */}
                 <div>
-                  <label htmlFor="role" className="block text-foreground mb-2">
-                    Role/Position <span className="text-destructive">*</span>
+                  <label
+                    htmlFor="designation"
+                    className="block text-foreground mb-2"
+                  >
+                    Designation <span className="text-destructive">*</span>
                   </label>
                   <input
-                    id="role"
+                    id="designation"
                     type="text"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
+                    value={designation}
+                    onChange={(e) => setDesignation(e.target.value)}
                     className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    placeholder="e.g., Principal, Head of Department"
+                    placeholder="e.g., Principal, Program Manager"
                     required
                   />
                 </div>
 
-                {/* Department */}
+                <div>
+                  <label htmlFor="role" className="block text-foreground mb-2">
+                    Member Role <span className="text-destructive">*</span>
+                  </label>
+                  <select
+                    id="role"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as MemberRole)}
+                    className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    required
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label
                     htmlFor="department"
@@ -143,27 +306,22 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
                   >
                     Department
                   </label>
-                  <select
+                  <input
                     id="department"
+                    type="text"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
                     className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  >
-                    <option value="">Select Department</option>
-                    <option value="Administration">Administration</option>
-                    <option value="Science">Science</option>
-                    <option value="Mathematics">Mathematics</option>
-                    <option value="English">English</option>
-                    <option value="Social Studies">Social Studies</option>
-                    <option value="Arts">Arts</option>
-                    <option value="Sports">Sports</option>
-                    <option value="IT">Information Technology</option>
-                    <option value="Library">Library</option>
-                    <option value="Admissions">Admissions</option>
-                  </select>
+                    placeholder="e.g., Administration"
+                  />
                 </div>
+              </div>
+            </div>
 
-                {/* Email */}
+            <div className="bg-card border border-border rounded-lg p-6">
+              <h3 className="text-foreground mb-4">Contact & Links</h3>
+
+              <div className="space-y-4">
                 <div>
                   <label htmlFor="email" className="block text-foreground mb-2">
                     Email Address
@@ -178,73 +336,27 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
                   />
                 </div>
 
-                {/* Phone */}
-                <div>
-                  <label htmlFor="phone" className="block text-foreground mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Information */}
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Additional Information</h3>
-
-              <div className="space-y-4">
-                {/* Qualifications */}
                 <div>
                   <label
-                    htmlFor="qualifications"
+                    htmlFor="linkedinUrl"
                     className="block text-foreground mb-2"
                   >
-                    Qualifications
+                    LinkedIn URL
                   </label>
                   <input
-                    id="qualifications"
-                    type="text"
-                    value={qualifications}
-                    onChange={(e) => setQualifications(e.target.value)}
+                    id="linkedinUrl"
+                    type="url"
+                    value={linkedinUrl}
+                    onChange={(e) => setLinkedinUrl(e.target.value)}
                     className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    placeholder="e.g., Ph.D., M.Ed., B.Sc."
+                    placeholder="https://linkedin.com/in/username"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    List educational qualifications separated by commas
-                  </p>
-                </div>
-
-                {/* Bio */}
-                <div>
-                  <label htmlFor="bio" className="block text-foreground mb-2">
-                    Biography
-                  </label>
-                  <textarea
-                    id="bio"
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    rows={5}
-                    className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                    placeholder="Enter a brief biography or professional summary..."
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {bio.length} characters
-                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Sidebar Column */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Photo Upload */}
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Profile Photo</h3>
 
@@ -294,39 +406,55 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
               </p>
             </div>
 
-            {/* Visibility Settings */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Visibility</h3>
+              <h3 className="text-foreground mb-4">Display Settings</h3>
 
-              <div className="flex items-center justify-between">
+              <div className="space-y-4">
                 <div>
-                  <p className="text-foreground text-sm">Display on website</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Show this member on the public website
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsActive(!isActive)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isActive ? "bg-primary" : "bg-muted"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isActive ? "translate-x-6" : "translate-x-1"
-                    }`}
+                  <label htmlFor="order" className="block text-foreground mb-2">
+                    Display Order
+                  </label>
+                  <input
+                    id="order"
+                    type="number"
+                    min={0}
+                    value={order}
+                    onChange={(e) => setOrder(e.target.value)}
+                    className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    placeholder="e.g., 1"
                   />
-                </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-foreground text-sm">Display on website</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Show this member publicly
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsActive(!isActive)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      isActive ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        isActive ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex flex-col gap-3">
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:opacity-90 transition-opacity"
+                  className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
+                  disabled={loading}
                 >
                   <Save className="w-4 h-4" />
                   {mode === "create" ? "Create Member" : "Save Changes"}

@@ -1,34 +1,101 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Save, X } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
+
+type GalleryCategory =
+  | "INFRASTRUCTURE"
+  | "EVENTS"
+  | "WORKSPACE"
+  | "FACILITIES"
+  | "ACTIVITIES"
+  | "OTHER";
+
+const CATEGORY_OPTIONS: { label: string; value: GalleryCategory }[] = [
+  { label: "Infrastructure", value: "INFRASTRUCTURE" },
+  { label: "Events", value: "EVENTS" },
+  { label: "Workspace", value: "WORKSPACE" },
+  { label: "Facilities", value: "FACILITIES" },
+  { label: "Activities", value: "ACTIVITIES" },
+  { label: "Other", value: "OTHER" },
+];
 
 export default function GalleryFormPage() {
   const navigate = useNavigate();
+  const { accessToken } = useAuthStore();
+
+  const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("Events");
-  const [description, setDescription] = useState("");
-  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [subtitle, setSubtitle] = useState("");
+  const [category, setCategory] = useState<GalleryCategory>("EVENTS");
+  const [images, setImages] = useState<File[]>([]);
+
+  const previews = useMemo(
+    () => images.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })),
+    [images],
+  );
+
+  useEffect(() => {
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [previews]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setCoverImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files) return;
+    setImages((prev) => [...prev, ...Array.from(files)]);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleRemoveImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Creating gallery album:", {
-      title,
-      category,
-      description,
-      coverImage,
-    });
-    alert("Gallery album created successfully!");
-    navigate("/dashboard/gallery");
+
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+
+    if (!title.trim() || !subtitle.trim()) {
+      toast.error("Title and subtitle are required.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("subtitle", subtitle.trim());
+      formData.append("category", category);
+      images.forEach((image) => formData.append("images", image));
+
+      const res = await fetch("http://localhost:4000/api/admin/gallery", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Request failed");
+      }
+
+      const data = await res.json();
+      toast.success("Gallery album created successfully");
+
+      navigate(`/dashboard/gallery/${data.gallery.id}`);
+    } catch (error: any) {
+      toast.error(error?.message || "Create failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -43,9 +110,13 @@ export default function GalleryFormPage() {
         </button>
         <h1 className="text-foreground mb-2">Create Gallery Album</h1>
         <p className="text-muted-foreground">
-          Add a new album and upload a cover image
+          Add album info and optionally upload initial images
         </p>
       </div>
+
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Processing...</p>
+      )}
 
       <form onSubmit={handleSave}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -66,72 +137,70 @@ export default function GalleryFormPage() {
             </div>
 
             <div className="bg-card border border-border rounded-lg p-6">
+              <label htmlFor="subtitle" className="block text-foreground mb-2">
+                Subtitle <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                id="subtitle"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                placeholder="Short summary about this album..."
+                rows={4}
+                required
+                className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
+              />
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-6">
               <label htmlFor="category" className="block text-foreground mb-2">
                 Category <span className="text-destructive">*</span>
               </label>
               <select
                 id="category"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => setCategory(e.target.value as GalleryCategory)}
                 className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               >
-                <option value="Events">Events</option>
-                <option value="Sports">Sports</option>
-                <option value="Academics">Academics</option>
-                <option value="Cultural">Cultural</option>
-                <option value="General">General</option>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
-            </div>
-
-            <div className="bg-card border border-border rounded-lg p-6">
-              <label
-                htmlFor="description"
-                className="block text-foreground mb-2"
-              >
-                Description
-              </label>
-              <textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Short summary about this album..."
-                rows={5}
-                className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
-              />
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Cover Image</h3>
-              {coverImage ? (
+              <h3 className="text-foreground mb-4">Initial Images</h3>
+
+              {previews.length > 0 ? (
                 <div className="space-y-3">
-                  <div className="relative rounded-lg overflow-hidden border border-border">
-                    <img
-                      src={coverImage}
-                      alt="Cover"
-                      className="w-full h-48 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setCoverImage(null)}
-                      className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+                  {previews.map((preview, index) => (
+                    <div
+                      key={`${preview.name}-${index}`}
+                      className="relative rounded-lg overflow-hidden border border-border"
                     >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setCoverImage(null)}
-                    className="w-full text-sm text-destructive hover:underline"
-                  >
-                    Remove Image
-                  </button>
+                      <img
+                        src={preview.url}
+                        alt={preview.name}
+                        className="w-full h-32 object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(index)}
+                        className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <label className="block">
                   <input
                     type="file"
+                    multiple
                     accept="image/*"
                     onChange={handleImageUpload}
                     className="hidden"
@@ -141,14 +210,25 @@ export default function GalleryFormPage() {
                       <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
                         <ImageIcon className="w-6 h-6 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-foreground">
-                        Upload Cover Image
-                      </p>
+                      <p className="text-sm text-foreground">Upload Images</p>
                       <p className="text-xs text-muted-foreground">
-                        Click to browse
+                        Click to browse (optional)
                       </p>
                     </div>
                   </div>
+                </label>
+              )}
+
+              {previews.length > 0 && (
+                <label className="mt-3 inline-flex text-sm text-primary cursor-pointer hover:underline">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  Add more images
                 </label>
               )}
             </div>
@@ -156,7 +236,8 @@ export default function GalleryFormPage() {
             <div className="bg-card border border-border rounded-lg p-6 space-y-3">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity"
+                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
+                disabled={loading}
               >
                 <Save className="w-4 h-4" />
                 Create Album

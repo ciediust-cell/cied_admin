@@ -1,11 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Upload,
-  X,
   Save,
   ArrowLeft,
-  Image as ImageIcon,
   Plus,
   Trash2,
   GripVertical,
@@ -14,118 +11,226 @@ import {
   Clock,
   GraduationCap,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
 
 interface ProgramFormPageProps {
   mode: "create" | "edit";
 }
 
-interface Highlight {
+interface TextItem {
   id: string;
   text: string;
 }
 
 export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
   const navigate = useNavigate();
-  const params = useParams();
-  const resolvedProgramId = params.programId
-    ? Number(params.programId)
-    : undefined;
-  const [title, setTitle] = useState(
-    mode === "edit" ? "Bachelor of Science in Computer Science" : "",
-  );
-  const [description, setDescription] = useState(
-    mode === "edit"
-      ? "A comprehensive program designed to provide students with a strong foundation in computer science principles, programming, algorithms, and software development. This degree prepares graduates for successful careers in technology and innovation."
-      : "",
-  );
-  const [category, setCategory] = useState(
-    mode === "edit" ? "Undergraduate" : "Undergraduate",
-  );
-  const [duration, setDuration] = useState(mode === "edit" ? "4 Years" : "");
-  const [applicationLink, setApplicationLink] = useState(
-    mode === "edit" ? "https://example.com/apply/computer-science" : "",
-  );
-  const [isActive, setIsActive] = useState(mode === "edit" ? true : false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(
-    mode === "edit"
-      ? "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800"
-      : null,
-  );
+  const { programId } = useParams();
+  const { accessToken } = useAuthStore();
 
-  const [highlights, setHighlights] = useState<Highlight[]>(
-    mode === "edit"
-      ? [
-          {
-            id: "1",
-            text: "Industry-aligned curriculum with hands-on projects",
-          },
-          {
-            id: "2",
-            text: "State-of-the-art computer labs and infrastructure",
-          },
-          {
-            id: "3",
-            text: "Internship opportunities with leading tech companies",
-          },
-          { id: "4", text: "Expert faculty with industry experience" },
-          { id: "5", text: "Strong placement record with top recruiters" },
-        ]
-      : [{ id: "1", text: "" }],
-  );
+  const [loading, setLoading] = useState(false);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const [title, setTitle] = useState("");
+  const [shortDescription, setShortDescription] = useState("");
+  const [overview, setOverview] = useState("");
+  const [duration, setDuration] = useState("");
+  const [eligibility, setEligibility] = useState("");
+  const [icon, setIcon] = useState("");
+  const [applyEnabled, setApplyEnabled] = useState(false);
+  const [applyUrl, setApplyUrl] = useState("");
+
+  const [highlights, setHighlights] = useState<TextItem[]>([
+    { id: "1", text: "" },
+  ]);
+  const [applicationSteps, setApplicationSteps] = useState<TextItem[]>([
+    { id: "1", text: "" },
+  ]);
+
+  const nextId = (items: TextItem[]) =>
+    (
+      Math.max(0, ...items.map((item) => Number.parseInt(item.id, 10) || 0)) + 1
+    ).toString();
+
+  const mapToTextItems = (
+    items: any[] | undefined,
+    key: "text" | "description",
+  ): TextItem[] => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return [{ id: "1", text: "" }];
     }
+
+    return items.map((item, index) => ({
+      id: String(index + 1),
+      text: item?.[key] || "",
+    }));
   };
 
-  const handleRemoveImage = () => {
-    setUploadedImage(null);
-  };
+  useEffect(() => {
+    if (mode !== "edit" || !programId || !accessToken) return;
+
+    const fetchProgram = async () => {
+      try {
+        setLoading(true);
+
+        const res = await fetch(
+          `http://localhost:4000/api/admin/programs/${programId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        if (!res.ok) throw new Error();
+
+        const existing = await res.json();
+
+        setTitle(existing.title || "");
+        setShortDescription(existing.shortDescription || "");
+        setOverview(existing.overview || "");
+        setDuration(existing.duration || "");
+        setEligibility(existing.eligibility || "");
+        setIcon(existing.icon || "");
+        setApplyEnabled(Boolean(existing.applyEnabled));
+        setApplyUrl(existing.applyUrl || "");
+
+        setHighlights(mapToTextItems(existing.highlights, "text"));
+
+        const orderedSteps = Array.isArray(existing.applicationSteps)
+          ? [...existing.applicationSteps].sort(
+              (a, b) => (a?.stepNumber || 0) - (b?.stepNumber || 0),
+            )
+          : [];
+        setApplicationSteps(mapToTextItems(orderedSteps, "description"));
+      } catch {
+        toast.error("Failed to load program");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProgram();
+  }, [mode, programId, accessToken]);
 
   const handleAddHighlight = () => {
-    const newId = (
-      Math.max(0, ...highlights.map((h) => parseInt(h.id))) + 1
-    ).toString();
-    setHighlights([...highlights, { id: newId, text: "" }]);
+    setHighlights([...highlights, { id: nextId(highlights), text: "" }]);
   };
 
   const handleRemoveHighlight = (id: string) => {
     if (highlights.length > 1) {
-      setHighlights(highlights.filter((h) => h.id !== id));
+      setHighlights(highlights.filter((item) => item.id !== id));
     }
   };
 
   const handleHighlightChange = (id: string, text: string) => {
-    setHighlights(highlights.map((h) => (h.id === id ? { ...h, text } : h)));
+    setHighlights(
+      highlights.map((item) => (item.id === id ? { ...item, text } : item)),
+    );
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleAddApplicationStep = () => {
+    setApplicationSteps([
+      ...applicationSteps,
+      { id: nextId(applicationSteps), text: "" },
+    ]);
+  };
+
+  const handleRemoveApplicationStep = (id: string) => {
+    if (applicationSteps.length > 1) {
+      setApplicationSteps(applicationSteps.filter((item) => item.id !== id));
+    }
+  };
+
+  const handleApplicationStepChange = (id: string, text: string) => {
+    setApplicationSteps(
+      applicationSteps.map((item) =>
+        item.id === id ? { ...item, text } : item,
+      ),
+    );
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Saving program:", {
-      title,
-      description,
-      category,
-      duration,
-      applicationLink,
-      highlights: highlights.filter((h) => h.text.trim() !== ""),
-      isActive,
-      uploadedImage,
-      programId: resolvedProgramId,
-    });
-    // Mock save logic
-    alert(`Program ${mode === "create" ? "created" : "updated"} successfully!`);
-    navigate("/dashboard/programs");
+
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+
+    const payload = {
+      title: title.trim(),
+      shortDescription: shortDescription.trim(),
+      overview: overview.trim(),
+      duration: duration.trim(),
+      eligibility: eligibility.trim(),
+      icon: icon.trim() || undefined,
+      applyEnabled,
+      applyUrl: applyEnabled ? applyUrl.trim() : undefined,
+      highlights: highlights
+        .map((item) => item.text.trim())
+        .filter((item) => item.length > 0),
+      applicationSteps: applicationSteps
+        .map((item) => item.text.trim())
+        .filter((item) => item.length > 0),
+    };
+
+    if (
+      !payload.title ||
+      !payload.shortDescription ||
+      !payload.overview ||
+      !payload.duration ||
+      !payload.eligibility
+    ) {
+      toast.error("Please fill all required fields.");
+      return;
+    }
+
+    if (payload.applyEnabled && !payload.applyUrl) {
+      toast.error("Please add application URL when applications are enabled.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const url =
+        mode === "create"
+          ? "http://localhost:4000/api/admin/programs"
+          : `http://localhost:4000/api/admin/programs/${programId}`;
+      const method = mode === "create" ? "POST" : "PUT";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || "Request failed");
+      }
+
+      toast.success(
+        mode === "create"
+          ? "Program created successfully"
+          : "Program updated successfully",
+      );
+      navigate("/dashboard/programs");
+    } catch (error: any) {
+      toast.error(
+        error?.message ||
+          (mode === "create" ? "Create failed" : "Update failed"),
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="p-8">
-      {/* Page Header */}
       <div className="mb-8">
         <button
           onClick={() => navigate("/dashboard/programs")}
@@ -144,16 +249,16 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
         </p>
       </div>
 
-      {/* Form */}
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Processing...</p>
+      )}
+
       <form onSubmit={handleSave}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Basic Information */}
             <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Basic Information</h3>
 
-              {/* Title Field */}
               <div className="mb-4">
                 <label htmlFor="title" className="block text-foreground mb-2">
                   Program Title <span className="text-destructive">*</span>
@@ -163,39 +268,31 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g., Bachelor of Science in Computer Science"
+                  placeholder="e.g., Incubation Program for Startups"
                   required
                   className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
                 />
               </div>
 
-              {/* Category and Duration */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label
-                    htmlFor="category"
-                    className="block text-foreground mb-2"
-                  >
-                    Category <span className="text-destructive">*</span>
-                  </label>
-                  <div className="relative">
-                    <GraduationCap className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <select
-                      id="category"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      required
-                      className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors appearance-none"
-                    >
-                      <option value="Undergraduate">Undergraduate</option>
-                      <option value="Postgraduate">Postgraduate</option>
-                      <option value="Doctorate">Doctorate</option>
-                      <option value="Certificate">Certificate</option>
-                      <option value="Diploma">Diploma</option>
-                    </select>
-                  </div>
-                </div>
+              <div className="mb-4">
+                <label
+                  htmlFor="shortDescription"
+                  className="block text-foreground mb-2"
+                >
+                  Short Description <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  id="shortDescription"
+                  value={shortDescription}
+                  onChange={(e) => setShortDescription(e.target.value)}
+                  placeholder="A concise summary for listing cards"
+                  required
+                  rows={3}
+                  className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
+                />
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label
                     htmlFor="duration"
@@ -216,39 +313,53 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
                     />
                   </div>
                 </div>
+                <div>
+                  <label
+                    htmlFor="eligibility"
+                    className="block text-foreground mb-2"
+                  >
+                    Eligibility <span className="text-destructive">*</span>
+                  </label>
+                  <div className="relative">
+                    <GraduationCap className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="eligibility"
+                      type="text"
+                      value={eligibility}
+                      onChange={(e) => setEligibility(e.target.value)}
+                      placeholder="e.g., 10+2 with Science"
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Description Field */}
               <div>
                 <label
-                  htmlFor="description"
+                  htmlFor="overview"
                   className="block text-foreground mb-2"
                 >
-                  Description <span className="text-destructive">*</span>
+                  Overview <span className="text-destructive">*</span>
                 </label>
                 <textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  id="overview"
+                  value={overview}
+                  onChange={(e) => setOverview(e.target.value)}
                   placeholder="Provide a detailed overview of the program..."
                   required
                   rows={6}
                   className="w-full px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
                 />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Describe the program objectives, curriculum, and career
-                  prospects
-                </p>
               </div>
             </div>
 
-            {/* Program Highlights */}
             <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-foreground">Program Highlights</h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Add key features, benefits, or learning outcomes
+                    Add key benefits or outcomes
                   </p>
                 </div>
                 <button
@@ -262,8 +373,8 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
               </div>
 
               <div className="space-y-3">
-                {highlights.map((highlight, index) => (
-                  <div key={highlight.id} className="flex items-start gap-3">
+                {highlights.map((item, index) => (
+                  <div key={item.id} className="flex items-start gap-3">
                     <div className="flex items-center gap-2 flex-1">
                       <div className="flex items-center gap-2 text-muted-foreground mt-3">
                         <GripVertical className="w-4 h-4" />
@@ -271,17 +382,17 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
                       </div>
                       <input
                         type="text"
-                        value={highlight.text}
+                        value={item.text}
                         onChange={(e) =>
-                          handleHighlightChange(highlight.id, e.target.value)
+                          handleHighlightChange(item.id, e.target.value)
                         }
-                        placeholder="Enter program highlight or feature..."
+                        placeholder="Enter program highlight..."
                         className="flex-1 px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
                       />
                       {highlights.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => handleRemoveHighlight(highlight.id)}
+                          onClick={() => handleRemoveHighlight(item.id)}
                           className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors flex-shrink-0"
                           title="Remove"
                         >
@@ -294,136 +405,129 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
               </div>
             </div>
 
-            {/* Application Link */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Application Information</h3>
-              <div>
-                <label
-                  htmlFor="applicationLink"
-                  className="block text-foreground mb-2"
-                >
-                  External Application Link{" "}
-                  <span className="text-muted-foreground text-sm">
-                    (Optional)
-                  </span>
-                </label>
-                <div className="relative">
-                  <LinkIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    id="applicationLink"
-                    type="url"
-                    value={applicationLink}
-                    onChange={(e) => setApplicationLink(e.target.value)}
-                    placeholder="https://example.com/apply/program-name"
-                    className="w-full pl-10 pr-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-                  />
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-foreground">Application Steps</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Add steps users should follow to apply
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Link to external application portal or admission form
-                </p>
+                <button
+                  type="button"
+                  onClick={handleAddApplicationStep}
+                  className="flex items-center gap-2 text-primary hover:text-primary/80 text-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Step
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {applicationSteps.map((item, index) => (
+                  <div key={item.id} className="flex items-start gap-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="flex items-center gap-2 text-muted-foreground mt-3">
+                        <GripVertical className="w-4 h-4" />
+                        <span className="text-sm">{index + 1}.</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.text}
+                        onChange={(e) =>
+                          handleApplicationStepChange(item.id, e.target.value)
+                        }
+                        placeholder="Enter application step..."
+                        className="flex-1 px-4 py-3 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                      />
+                      {applicationSteps.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveApplicationStep(item.id)}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors flex-shrink-0"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Sidebar Column */}
           <div className="space-y-6">
-            {/* Status Settings */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Program Status</h3>
-
+              <h3 className="text-foreground mb-4">Application Settings</h3>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-foreground text-sm mb-1">Visibility</p>
+                  <p className="text-foreground text-sm mb-1">
+                    Accept Applications
+                  </p>
                   <p className="text-muted-foreground text-xs">
-                    {isActive
-                      ? "Active & accepting students"
-                      : "Inactive & hidden"}
+                    {applyEnabled ? "Enabled" : "Disabled"}
                   </p>
                 </div>
-
-                {/* Toggle Switch */}
                 <button
                   type="button"
-                  onClick={() => setIsActive(!isActive)}
+                  onClick={() => setApplyEnabled(!applyEnabled)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isActive ? "bg-primary" : "bg-switch-background"
+                    applyEnabled ? "bg-primary" : "bg-switch-background"
                   }`}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isActive ? "translate-x-6" : "translate-x-1"
+                      applyEnabled ? "translate-x-6" : "translate-x-1"
                     }`}
                   />
                 </button>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground">
-                  {isActive ? (
-                    <span className="text-green-600">● Active</span>
-                  ) : (
-                    <span className="text-yellow-600">● Inactive</span>
-                  )}
-                </p>
-              </div>
+              {applyEnabled && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <label
+                    htmlFor="applyUrl"
+                    className="block text-foreground mb-2 text-sm"
+                  >
+                    Application URL
+                  </label>
+                  <div className="relative">
+                    <LinkIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="applyUrl"
+                      type="url"
+                      value={applyUrl}
+                      onChange={(e) => setApplyUrl(e.target.value)}
+                      placeholder="https://example.com/apply/program-name"
+                      className="w-full pl-10 pr-4 py-2.5 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Program Image */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="text-foreground mb-4">Program Image</h3>
-
-              {uploadedImage ? (
-                <div className="space-y-3">
-                  <div className="relative rounded-lg overflow-hidden border border-border">
-                    <img
-                      src={uploadedImage}
-                      alt="Preview"
-                      className="w-full h-48 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRemoveImage}
-                      className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    className="w-full text-sm text-destructive hover:underline"
-                  >
-                    Remove Image
-                  </button>
-                </div>
-              ) : (
-                <label className="block">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-accent transition-colors">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
-                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm text-foreground">Upload Image</p>
-                      <p className="text-xs text-muted-foreground">
-                        Click to browse
-                      </p>
-                    </div>
-                  </div>
-                </label>
-              )}
-
-              <p className="text-xs text-muted-foreground mt-3">
-                Recommended: 1200x800px (JPG, PNG)
+              <h3 className="text-foreground mb-4">Program Icon</h3>
+              <label
+                htmlFor="icon"
+                className="block text-foreground mb-2 text-sm"
+              >
+                Icon Name or URL
+              </label>
+              <input
+                id="icon"
+                type="text"
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder="e.g., graduation-cap or https://..."
+                className="w-full px-4 py-2.5 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Stored as `icon` in backend.
               </p>
             </div>
 
-            {/* Quick Preview */}
             {title && (
               <div className="bg-card border border-border rounded-lg p-6">
                 <h3 className="text-foreground mb-4">Quick Preview</h3>
@@ -435,14 +539,14 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
                       <p className="text-sm text-foreground">{title}</p>
                     </div>
                   </div>
-                  {category && (
+                  {eligibility && (
                     <div className="flex items-start gap-3">
                       <GraduationCap className="w-4 h-4 text-primary mt-0.5" />
                       <div>
                         <p className="text-xs text-muted-foreground">
-                          Category
+                          Eligibility
                         </p>
-                        <p className="text-sm text-foreground">{category}</p>
+                        <p className="text-sm text-foreground">{eligibility}</p>
                       </div>
                     </div>
                   )}
@@ -457,15 +561,34 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
                       </div>
                     </div>
                   )}
-                  {highlights.filter((h) => h.text.trim() !== "").length >
+                  {highlights.filter((item) => item.text.trim() !== "").length >
                     0 && (
                     <div className="pt-3 border-t border-border">
                       <p className="text-xs text-muted-foreground mb-2">
                         Highlights
                       </p>
                       <p className="text-sm text-foreground">
-                        {highlights.filter((h) => h.text.trim() !== "").length}{" "}
+                        {
+                          highlights.filter((item) => item.text.trim() !== "")
+                            .length
+                        }{" "}
                         item(s)
+                      </p>
+                    </div>
+                  )}
+                  {applicationSteps.filter((item) => item.text.trim() !== "")
+                    .length > 0 && (
+                    <div className="pt-3 border-t border-border">
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Application Steps
+                      </p>
+                      <p className="text-sm text-foreground">
+                        {
+                          applicationSteps.filter(
+                            (item) => item.text.trim() !== "",
+                          ).length
+                        }{" "}
+                        step(s)
                       </p>
                     </div>
                   )}
@@ -473,7 +596,6 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="bg-card border border-border rounded-lg p-6 space-y-3">
               <button
                 type="submit"

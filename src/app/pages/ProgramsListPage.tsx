@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -7,145 +7,135 @@ import {
   Search,
   BookOpen,
   GraduationCap,
-  Users,
+  Power,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
 
 interface ProgramItem {
-  id: number;
+  id: string;
   title: string;
-  category: string;
-  status: "Active" | "Inactive" | "Archived";
+  shortDescription: string;
   duration: string;
-  enrolledStudents?: number;
-  lastUpdated: string;
+  eligibility: string;
+  applyEnabled: boolean;
+  isActive: boolean;
+  updatedAt: string;
 }
-
-const mockProgramsData: ProgramItem[] = [
-  {
-    id: 1,
-    title: "Bachelor of Science in Computer Science",
-    category: "Undergraduate",
-    status: "Active",
-    duration: "4 Years",
-    enrolledStudents: 450,
-    lastUpdated: "2026-02-01",
-  },
-  {
-    id: 2,
-    title: "Master of Business Administration",
-    category: "Postgraduate",
-    status: "Active",
-    duration: "2 Years",
-    enrolledStudents: 180,
-    lastUpdated: "2026-01-28",
-  },
-  {
-    id: 3,
-    title: "Bachelor of Arts in English Literature",
-    category: "Undergraduate",
-    status: "Active",
-    duration: "3 Years",
-    enrolledStudents: 320,
-    lastUpdated: "2026-01-25",
-  },
-  {
-    id: 4,
-    title: "Doctor of Philosophy in Physics",
-    category: "Doctorate",
-    status: "Active",
-    duration: "5 Years",
-    enrolledStudents: 45,
-    lastUpdated: "2026-01-20",
-  },
-  {
-    id: 5,
-    title: "Certificate in Digital Marketing",
-    category: "Certificate",
-    status: "Active",
-    duration: "6 Months",
-    enrolledStudents: 95,
-    lastUpdated: "2026-02-05",
-  },
-  {
-    id: 6,
-    title: "Diploma in Graphic Design",
-    category: "Diploma",
-    status: "Active",
-    duration: "1 Year",
-    enrolledStudents: 120,
-    lastUpdated: "2026-01-15",
-  },
-  {
-    id: 7,
-    title: "Bachelor of Engineering in Mechanical Engineering",
-    category: "Undergraduate",
-    status: "Active",
-    duration: "4 Years",
-    enrolledStudents: 280,
-    lastUpdated: "2026-01-30",
-  },
-  {
-    id: 8,
-    title: "Master of Science in Data Science",
-    category: "Postgraduate",
-    status: "Active",
-    duration: "2 Years",
-    enrolledStudents: 160,
-    lastUpdated: "2026-02-08",
-  },
-  {
-    id: 9,
-    title: "Bachelor of Commerce",
-    category: "Undergraduate",
-    status: "Inactive",
-    duration: "3 Years",
-    enrolledStudents: 0,
-    lastUpdated: "2025-12-10",
-  },
-  {
-    id: 10,
-    title: "Advanced Diploma in Culinary Arts",
-    category: "Diploma",
-    status: "Archived",
-    duration: "2 Years",
-    enrolledStudents: 0,
-    lastUpdated: "2025-08-15",
-  },
-];
 
 export function ProgramsListPage() {
   const navigate = useNavigate();
-  const [programs, setPrograms] = useState<ProgramItem[]>(mockProgramsData);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<
-    "All" | "Active" | "Inactive" | "Archived"
-  >("All");
+  const { accessToken } = useAuthStore();
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this program?")) {
-      setPrograms(programs.filter((item) => item.id !== id));
+  const [programs, setPrograms] = useState<ProgramItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">(
+    "All",
+  );
+  const [applyFilter, setApplyFilter] = useState<"All" | "Enabled" | "Disabled">(
+    "All",
+  );
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const fetchPrograms = async () => {
+      try {
+        setLoading(true);
+
+        const res = await fetch("http://localhost:4000/api/admin/programs", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!res.ok) throw new Error();
+
+        const data = await res.json();
+        setPrograms(data);
+      } catch {
+        toast.error("Failed to load programs");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrograms();
+  }, [accessToken]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this program?")) return;
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(`http://localhost:4000/api/admin/programs/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) throw new Error();
+
+      setPrograms((prev) => prev.filter((item) => item.id !== id));
+      toast.success("Program deleted");
+    } catch {
+      toast.error("Delete failed");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleEdit = (id: number) => {
-    navigate(`/dashboard/programs/${id}/edit`);
+  const handleToggleStatus = async (id: string) => {
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        `http://localhost:4000/api/admin/programs/${id}/toggle`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      const updatedProgram = data.program;
+
+      setPrograms((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, isActive: updatedProgram.isActive } : item,
+        ),
+      );
+      toast.success("Program status updated");
+    } catch {
+      toast.error("Status update failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const categories = [
-    "All",
-    ...Array.from(new Set(programs.map((p) => p.category))),
-  ];
-
   const filteredPrograms = programs.filter((program) => {
-    const matchesSearch = program.title
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      categoryFilter === "All" || program.category === categoryFilter;
+    const matchesSearch =
+      program.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      program.shortDescription.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesStatus =
-      statusFilter === "All" || program.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesStatus;
+      statusFilter === "All" ||
+      (statusFilter === "Active" && program.isActive) ||
+      (statusFilter === "Inactive" && !program.isActive);
+
+    const matchesApply =
+      applyFilter === "All" ||
+      (applyFilter === "Enabled" && program.applyEnabled) ||
+      (applyFilter === "Disabled" && !program.applyEnabled);
+
+    return matchesSearch && matchesStatus && matchesApply;
   });
 
   const formatDate = (dateString: string) => {
@@ -159,16 +149,15 @@ export function ProgramsListPage() {
 
   return (
     <div className="p-8">
-      {/* Page Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-foreground mb-2">Manage Programs</h1>
           <p className="text-muted-foreground">
-            Oversee academic programs, courses, and certifications
+            Oversee academic programs and admissions settings
           </p>
         </div>
         <button
-          onClick={() => navigate("/dashboard/programs/new")}
+          onClick={() => navigate("/dashboard/programs/createProgram")}
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:opacity-90 transition-opacity"
         >
           <Plus className="w-4 h-4" />
@@ -176,61 +165,56 @@ export function ProgramsListPage() {
         </button>
       </div>
 
-      {/* Filters and Search */}
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Loading...</p>
+      )}
+
       <div className="bg-card border border-border rounded-lg p-4 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search programs by title..."
+              placeholder="Search programs by title or short description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
 
-          {/* Category Filter */}
+          <div className="flex items-center gap-2">
+            {(["All", "Active", "Inactive"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                  statusFilter === status
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-input-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-2">
             <GraduationCap className="w-4 h-4 text-muted-foreground" />
             <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              value={applyFilter}
+              onChange={(e) =>
+                setApplyFilter(e.target.value as "All" | "Enabled" | "Disabled")
+              }
               className="px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
             >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
+              <option value="All">Applications: All</option>
+              <option value="Enabled">Applications: Enabled</option>
+              <option value="Disabled">Applications: Disabled</option>
             </select>
-          </div>
-
-          {/* Status Filter */}
-          <div className="flex items-center gap-2">
-            <div className="flex gap-2">
-              {(["All", "Active", "Inactive", "Archived"] as const).map(
-                (status) => (
-                  <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={`px-4 py-2 rounded-md text-sm transition-colors ${
-                      statusFilter === status
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-input-background text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ),
-              )}
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Programs Table */}
       {filteredPrograms.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -246,16 +230,16 @@ export function ProgramsListPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="text-left px-6 py-4 text-sm text-muted-foreground">
-                    Program Title
+                    Program
                   </th>
                   <th className="text-left px-6 py-4 text-sm text-muted-foreground">
-                    Category
+                    Eligibility
                   </th>
                   <th className="text-left px-6 py-4 text-sm text-muted-foreground">
                     Duration
                   </th>
                   <th className="text-left px-6 py-4 text-sm text-muted-foreground">
-                    Enrolled
+                    Applications
                   </th>
                   <th className="text-left px-6 py-4 text-sm text-muted-foreground">
                     Status
@@ -283,13 +267,16 @@ export function ProgramsListPage() {
                           <p className="text-foreground text-sm truncate">
                             {program.title}
                           </p>
+                          <p className="text-xs text-muted-foreground truncate max-w-80">
+                            {program.shortDescription}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex px-3 py-1 rounded-md text-xs bg-blue-50 text-blue-700 border border-blue-200">
-                        {program.category}
-                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        {program.eligibility}
+                      </p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm text-muted-foreground">
@@ -297,39 +284,47 @@ export function ProgramsListPage() {
                       </p>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <p className="text-sm text-foreground">
-                          {program.enrolledStudents || 0}
-                        </p>
-                      </div>
+                      <span
+                        className={`inline-flex px-3 py-1 rounded-full text-xs ${
+                          program.applyEnabled
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {program.applyEnabled ? "Enabled" : "Disabled"}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex px-3 py-1 rounded-full text-xs ${
-                          program.status === "Active"
+                          program.isActive
                             ? "bg-green-100 text-green-700"
-                            : program.status === "Inactive"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-gray-100 text-gray-700"
+                            : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
-                        {program.status}
+                        {program.isActive ? "Active" : "Inactive"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(program.lastUpdated)}
+                        {formatDate(program.updatedAt)}
                       </p>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => handleEdit(program.id)}
+                          onClick={() => navigate(`/dashboard/programs/${program.id}/edit`)}
                           className="p-2 text-primary hover:bg-primary/10 rounded-md transition-colors"
                           title="Edit"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(program.id)}
+                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                          title={program.isActive ? "Deactivate" : "Activate"}
+                        >
+                          <Power className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(program.id)}
@@ -348,10 +343,9 @@ export function ProgramsListPage() {
         </div>
       )}
 
-      {/* Stats Summary */}
-      {filteredPrograms.length > 0 && (
+      {programs.length > 0 && (
         <div className="mt-6 bg-card border border-border rounded-lg p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-muted-foreground mb-1">
                 Total Programs
@@ -363,24 +357,15 @@ export function ProgramsListPage() {
                 Active Programs
               </p>
               <p className="text-2xl text-green-600">
-                {programs.filter((p) => p.status === "Active").length}
+                {programs.filter((item) => item.isActive).length}
               </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1">
-                Total Students Enrolled
+                Applications Enabled
               </p>
               <p className="text-2xl text-blue-600">
-                {programs.reduce(
-                  (sum, p) => sum + (p.enrolledStudents || 0),
-                  0,
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Categories</p>
-              <p className="text-2xl text-purple-600">
-                {new Set(programs.map((p) => p.category)).size}
+                {programs.filter((item) => item.applyEnabled).length}
               </p>
             </div>
           </div>

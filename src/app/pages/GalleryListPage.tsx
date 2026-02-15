@@ -1,60 +1,132 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Image as ImageIcon,
   Trash2,
-  Edit,
   Folder,
   Calendar,
+  Power,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
+
+interface GalleryImage {
+  id: string;
+  imageUrl: string;
+}
 
 interface GalleryAlbum {
-  id: number;
+  id: string;
   title: string;
-  category: string;
-  coverUrl: string;
-  imageCount: number;
+  subtitle: string;
+  category:
+    | "INFRASTRUCTURE"
+    | "EVENTS"
+    | "WORKSPACE"
+    | "FACILITIES"
+    | "ACTIVITIES"
+    | "OTHER";
+  isActive: boolean;
+  coverImage: GalleryImage | null;
+  images: GalleryImage[];
   updatedAt: string;
 }
 
-const mockAlbums: GalleryAlbum[] = [
-  {
-    id: 1,
-    title: "Annual Day Celebration 2026",
-    category: "Events",
-    coverUrl:
-      "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
-    imageCount: 24,
-    updatedAt: "2026-02-06",
-  },
-  {
-    id: 2,
-    title: "Sports Day Highlights",
-    category: "Sports",
-    coverUrl:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800",
-    imageCount: 18,
-    updatedAt: "2026-01-30",
-  },
-  {
-    id: 3,
-    title: "Science Exhibition",
-    category: "Academics",
-    coverUrl:
-      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800",
-    imageCount: 12,
-    updatedAt: "2026-01-22",
-  },
-];
+const formatCategory = (category: GalleryAlbum["category"]) =>
+  category
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 
 export default function GalleryListPage() {
   const navigate = useNavigate();
-  const [albums, setAlbums] = useState<GalleryAlbum[]>(mockAlbums);
+  const { accessToken } = useAuthStore();
+  const [albums, setAlbums] = useState<GalleryAlbum[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this album?")) {
-      setAlbums(albums.filter((album) => album.id !== id));
+  const fetchAlbums = async () => {
+    if (!accessToken) return;
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("http://localhost:4000/api/admin/gallery", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      setAlbums(data);
+    } catch {
+      toast.error("Failed to load galleries");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlbums();
+  }, [accessToken]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this album?")) return;
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(`http://localhost:4000/api/admin/gallery/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) throw new Error();
+
+      setAlbums((prev) => prev.filter((album) => album.id !== id));
+      toast.success("Gallery deleted");
+    } catch {
+      toast.error("Delete failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (id: string) => {
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        `http://localhost:4000/api/admin/gallery/${id}/toggle`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      const updatedGallery = data.gallery;
+
+      setAlbums((prev) =>
+        prev.map((album) =>
+          album.id === id ? { ...album, isActive: updatedGallery.isActive } : album,
+        ),
+      );
+
+      toast.success("Gallery status updated");
+    } catch {
+      toast.error("Status update failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -67,7 +139,6 @@ export default function GalleryListPage() {
 
   return (
     <div className="p-8">
-      {/* Page Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-foreground mb-2">Gallery Albums</h1>
@@ -84,6 +155,10 @@ export default function GalleryListPage() {
         </button>
       </div>
 
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Loading...</p>
+      )}
+
       {albums.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <ImageIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -94,68 +169,89 @@ export default function GalleryListPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {albums.map((album) => (
-            <div
-              key={album.id}
-              className="bg-card border border-border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-            >
-              <button
-                onClick={() => navigate(`/dashboard/gallery/${album.id}`)}
-                className="block w-full text-left"
+          {albums.map((album) => {
+            const coverUrl =
+              album.coverImage?.imageUrl ||
+              album.images[0]?.imageUrl ||
+              "https://via.placeholder.com/800x450?text=No+Image";
+
+            return (
+              <div
+                key={album.id}
+                className="bg-card border border-border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
               >
-                <div className="h-48 bg-muted overflow-hidden">
-                  <img
-                    src={album.coverUrl}
-                    alt={album.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-foreground mb-1">{album.title}</h3>
-                      <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                        <Folder className="w-3.5 h-3.5" />
-                        <span>{album.category}</span>
+                <button
+                  onClick={() => navigate(`/dashboard/gallery/${album.id}`)}
+                  className="block w-full text-left"
+                >
+                  <div className="h-48 bg-muted overflow-hidden">
+                    <img
+                      src={coverUrl}
+                      alt={album.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-foreground mb-1">{album.title}</h3>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          {album.subtitle}
+                        </p>
+                        <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <Folder className="w-3.5 h-3.5" />
+                          <span>{formatCategory(album.category)}</span>
+                        </div>
                       </div>
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+                        {album.images.length} photos
+                      </span>
                     </div>
-                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
-                      {album.imageCount} photos
-                    </span>
-                  </div>
 
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>Updated {formatDate(album.updatedAt)}</span>
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>Updated {formatDate(album.updatedAt)}</span>
+                      </div>
+                      <span
+                        className={`inline-flex px-2 py-1 rounded-full text-xs ${
+                          album.isActive
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {album.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
                   </div>
+                </button>
+
+                <div className="border-t border-border px-5 py-3 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => navigate(`/dashboard/gallery/${album.id}`)}
+                    className="p-2 text-primary hover:bg-primary/10 rounded-md transition-colors"
+                    title="Open"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToggleStatus(album.id)}
+                    className="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                    title={album.isActive ? "Deactivate" : "Activate"}
+                  >
+                    <Power className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(album.id)}
+                    className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-              </button>
-
-              <div className="border-t border-border px-5 py-3 flex items-center justify-end gap-2">
-                <button
-                  onClick={() => navigate(`/dashboard/gallery/${album.id}`)}
-                  className="p-2 text-primary hover:bg-primary/10 rounded-md transition-colors"
-                  title="Open"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => navigate(`/dashboard/gallery/${album.id}`)}
-                  className="p-2 text-muted-foreground hover:bg-accent rounded-md transition-colors"
-                  title="Edit"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(album.id)}
-                  className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

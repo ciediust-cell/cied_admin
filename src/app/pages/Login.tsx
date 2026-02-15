@@ -1,17 +1,47 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock } from "lucide-react";
+import { useAuthStore } from "../../store/authStore";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock login logic
-    console.log("Login attempt:", { email, password });
-    navigate("/dashboard");
+
+    try {
+      const response = await fetch(
+        "http://localhost:4000/api/admin/auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Login failed");
+      }
+
+      const data = await response.json();
+
+      // Used Zustand
+      login(data.accessToken, data.refreshToken);
+
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error("Login error:", error.message);
+      alert(error.message);
+    }
   };
 
   return (
@@ -61,7 +91,7 @@ export default function Login() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="**********"
                 required
                 className="w-full px-4 py-2.5 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               />
