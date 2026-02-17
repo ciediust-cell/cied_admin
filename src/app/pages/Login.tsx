@@ -1,47 +1,46 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import toast from "react-hot-toast";
+import { getErrorMessage, loginAdmin } from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const accessToken = useAuthStore((state) => state.accessToken);
   const login = useAuthStore((state) => state.login);
+
+  useEffect(() => {
+    if (accessToken) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [accessToken, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
 
     try {
-      const response = await fetch(
-        "http://localhost:4000/api/admin/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Login failed");
-      }
-
-      const data = await response.json();
+      setSubmitting(true);
+      const data = await loginAdmin({ email, password });
 
       // Used Zustand
-      login(data.accessToken, data.refreshToken);
+      login(data.accessToken);
 
-      navigate("/dashboard");
-    } catch (error: any) {
-      console.error("Login error:", error.message);
-      alert(error.message);
+      navigate("/dashboard", { replace: true });
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Login failed"));
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    toast("Contact the super admin to reset your password.");
   };
 
   return (
@@ -100,20 +99,26 @@ export default function Login() {
             {/* Login Button */}
             <button
               type="submit"
-              className="w-full bg-primary text-primary-foreground py-2.5 rounded-md hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              disabled={submitting}
+              className="w-full bg-primary text-primary-foreground py-2.5 rounded-md hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Login
+              {submitting ? (
+                <LoadingIndicator label="Signing in..." className="justify-center" />
+              ) : (
+                "Login"
+              )}
             </button>
           </form>
 
           {/* Footer Link */}
           <div className="mt-6 text-center">
-            <a
-              href="#"
+            <button
+              type="button"
+              onClick={handleForgotPassword}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Forgot password?
-            </a>
+            </button>
           </div>
         </div>
 

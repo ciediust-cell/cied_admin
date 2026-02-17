@@ -13,6 +13,15 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  createAdminProgram,
+  getAdminProgramById,
+  getErrorMessage,
+  updateAdminProgram,
+  type ProgramApplicationStepResponse,
+  type ProgramHighlightResponse,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface ProgramFormPageProps {
   mode: "create" | "edit";
@@ -52,7 +61,7 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
     ).toString();
 
   const mapToTextItems = (
-    items: any[] | undefined,
+    items: Array<ProgramHighlightResponse | ProgramApplicationStepResponse> | undefined,
     key: "text" | "description",
   ): TextItem[] => {
     if (!Array.isArray(items) || items.length === 0) {
@@ -61,7 +70,7 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
 
     return items.map((item, index) => ({
       id: String(index + 1),
-      text: item?.[key] || "",
+      text: typeof item?.[key] === "string" ? item[key] : "",
     }));
   };
 
@@ -72,18 +81,7 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
       try {
         setLoading(true);
 
-        const res = await fetch(
-          `http://localhost:4000/api/admin/programs/${programId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          },
-        );
-
-        if (!res.ok) throw new Error();
-
-        const existing = await res.json();
+        const existing = await getAdminProgramById(programId);
 
         setTitle(existing.title || "");
         setShortDescription(existing.shortDescription || "");
@@ -102,8 +100,8 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
             )
           : [];
         setApplicationSteps(mapToTextItems(orderedSteps, "description"));
-      } catch {
-        toast.error("Failed to load program");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load program"));
       } finally {
         setLoading(false);
       }
@@ -193,24 +191,10 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
     try {
       setLoading(true);
 
-      const url =
-        mode === "create"
-          ? "http://localhost:4000/api/admin/programs"
-          : `http://localhost:4000/api/admin/programs/${programId}`;
-      const method = mode === "create" ? "POST" : "PUT";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Request failed");
+      if (mode === "create") {
+        await createAdminProgram(payload);
+      } else if (programId) {
+        await updateAdminProgram(programId, payload);
       }
 
       toast.success(
@@ -219,10 +203,9 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
           : "Program updated successfully",
       );
       navigate("/dashboard/programs");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(
-        error?.message ||
-          (mode === "create" ? "Create failed" : "Update failed"),
+        getErrorMessage(error, mode === "create" ? "Create failed" : "Update failed"),
       );
     } finally {
       setLoading(false);
@@ -599,16 +582,24 @@ export default function ProgramFormPage({ mode }: ProgramFormPageProps) {
             <div className="bg-card border border-border rounded-lg p-6 space-y-3">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" />
-                {mode === "create" ? "Create Program" : "Save Changes"}
+                {loading ? (
+                  <LoadingIndicator label="Saving..." />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {mode === "create" ? "Create Program" : "Save Changes"}
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={() => navigate("/dashboard/programs")}
-                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors"
+                disabled={loading}
+                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

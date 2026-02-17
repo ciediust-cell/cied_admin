@@ -3,14 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Save, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
-
-type GalleryCategory =
-  | "INFRASTRUCTURE"
-  | "EVENTS"
-  | "WORKSPACE"
-  | "FACILITIES"
-  | "ACTIVITIES"
-  | "OTHER";
+import {
+  createAdminGalleryAlbum,
+  getErrorMessage,
+  type GalleryCategory,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 const CATEGORY_OPTIONS: { label: string; value: GalleryCategory }[] = [
   { label: "Infrastructure", value: "INFRASTRUCTURE" },
@@ -74,25 +72,12 @@ export default function GalleryFormPage() {
       formData.append("category", category);
       images.forEach((image) => formData.append("images", image));
 
-      const res = await fetch("http://localhost:4000/api/admin/gallery", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Request failed");
-      }
-
-      const data = await res.json();
+      const data = await createAdminGalleryAlbum(formData);
       toast.success("Gallery album created successfully");
 
       navigate(`/dashboard/gallery/${data.gallery.id}`);
-    } catch (error: any) {
-      toast.error(error?.message || "Create failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Create failed"));
     } finally {
       setLoading(false);
     }
@@ -239,13 +224,20 @@ export default function GalleryFormPage() {
                 className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
                 disabled={loading}
               >
-                <Save className="w-4 h-4" />
-                Create Album
+                {loading ? (
+                  <LoadingIndicator label="Saving..." />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Create Album
+                  </>
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => navigate("/dashboard/gallery")}
-                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors"
+                disabled={loading}
+                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

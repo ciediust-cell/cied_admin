@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -12,18 +12,18 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  deleteAdminMember,
+  getAdminMembers,
+  getErrorMessage,
+  updateAdminMember,
+  type MemberResponse,
+  type MemberRole,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
-type MemberRole = "GOVERNANCE" | "MANAGEMENT" | "MENTOR" | "ADVISOR";
-
-interface Member {
-  id: string;
-  name: string;
-  designation: string;
-  role: MemberRole;
-  imageUrl: string;
-  order: number;
-  isActive: boolean;
-}
+type Member = MemberResponse;
 
 const roleLabel = (role: MemberRole) =>
   role.charAt(0) + role.slice(1).toLowerCase();
@@ -38,33 +38,28 @@ export function MembersListPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     if (!accessToken) return;
 
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:4000/api/admin/members", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await getAdminMembers();
       setMembers(sortByOrder(data));
-    } catch {
-      toast.error("Failed to load members");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to load members"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken]);
 
   useEffect(() => {
     fetchMembers();
-  }, [accessToken]);
+  }, [fetchMembers]);
 
   const sortedMembers = useMemo(() => sortByOrder(members), [members]);
 
@@ -84,41 +79,30 @@ export function MembersListPage() {
   });
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this member?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this member?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
+      setDeletingId(id);
 
-      const res = await fetch(`http://localhost:4000/api/admin/members/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
+      await deleteAdminMember(id);
 
       setMembers((prev) => prev.filter((member) => member.id !== id));
       toast.success("Member deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
   const handleToggleActive = async (member: Member) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/admin/members/${member.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ isActive: !member.isActive }),
-      });
-
-      if (!res.ok) throw new Error();
+      setTogglingId(member.id);
+      await updateAdminMember(member.id, { isActive: !member.isActive });
 
       setMembers((prev) =>
         prev.map((item) =>
@@ -126,8 +110,10 @@ export function MembersListPage() {
         ),
       );
       toast.success("Member status updated");
-    } catch {
-      toast.error("Status update failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Status update failed"));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -142,28 +128,12 @@ export function MembersListPage() {
     const targetMember = sortedMembers[targetIndex];
 
     try {
-      setLoading(true);
+      setMovingId(id);
 
-      const [resA, resB] = await Promise.all([
-        fetch(`http://localhost:4000/api/admin/members/${currentMember.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ order: targetMember.order }),
-        }),
-        fetch(`http://localhost:4000/api/admin/members/${targetMember.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ order: currentMember.order }),
-        }),
+      await Promise.all([
+        updateAdminMember(currentMember.id, { order: targetMember.order }),
+        updateAdminMember(targetMember.id, { order: currentMember.order }),
       ]);
-
-      if (!resA.ok || !resB.ok) throw new Error();
 
       setMembers((prev) =>
         sortByOrder(
@@ -179,10 +149,10 @@ export function MembersListPage() {
         ),
       );
       toast.success("Order updated");
-    } catch {
-      toast.error("Failed to reorder");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to reorder"));
     } finally {
-      setLoading(false);
+      setMovingId(null);
     }
   };
 
@@ -266,9 +236,9 @@ export function MembersListPage() {
                           <div className="flex flex-col gap-0.5">
                             <button
                               onClick={() => handleMove(member.id, -1)}
-                              disabled={isFirst}
+                              disabled={isFirst || movingId === member.id}
                               className={`p-0.5 rounded ${
-                                isFirst
+                                isFirst || movingId === member.id
                                   ? "text-muted-foreground/30 cursor-not-allowed"
                                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
                               } transition-colors`}
@@ -278,9 +248,9 @@ export function MembersListPage() {
                             </button>
                             <button
                               onClick={() => handleMove(member.id, 1)}
-                              disabled={isLast}
+                              disabled={isLast || movingId === member.id}
                               className={`p-0.5 rounded ${
-                                isLast
+                                isLast || movingId === member.id
                                   ? "text-muted-foreground/30 cursor-not-allowed"
                                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
                               } transition-colors`}
@@ -319,14 +289,17 @@ export function MembersListPage() {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handleToggleActive(member)}
+                          disabled={togglingId === member.id}
                           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-colors ${
                             member.isActive
                               ? "bg-green-100 text-green-700 hover:bg-green-200"
                               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          }`}
+                          } disabled:opacity-60 disabled:cursor-not-allowed`}
                           title={member.isActive ? "Click to hide" : "Click to show"}
                         >
-                          {member.isActive ? (
+                          {togglingId === member.id ? (
+                            <LoadingIndicator label="Updating..." className="text-xs" />
+                          ) : member.isActive ? (
                             <>
                               <Eye className="w-3 h-3" />
                               Active
@@ -353,10 +326,15 @@ export function MembersListPage() {
                           </button>
                           <button
                             onClick={() => handleDelete(member.id)}
-                            className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                            disabled={deletingId === member.id}
+                            className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             title="Delete"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {deletingId === member.id ? (
+                              <LoadingIndicator label="Deleting..." className="text-xs" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </td>

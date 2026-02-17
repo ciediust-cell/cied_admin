@@ -3,6 +3,7 @@ import {
   Newspaper,
   Calendar,
   GraduationCap,
+  Briefcase,
   Image,
   MessageSquare,
   Settings,
@@ -42,6 +43,12 @@ const navItems: NavItem[] = [
     label: "Programs",
     id: "programs",
     to: "/dashboard/programs",
+  },
+  {
+    icon: <Briefcase className="w-5 h-5" />,
+    label: "Portfolio",
+    id: "portfolio",
+    to: "/dashboard/portfolio",
   },
   {
     icon: <Image className="w-5 h-5" />,

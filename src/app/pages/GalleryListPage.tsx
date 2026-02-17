@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
@@ -10,30 +10,20 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  deleteAdminGalleryAlbum,
+  getAdminGalleryAlbums,
+  getErrorMessage,
+  toggleAdminGalleryAlbumStatus,
+  type GalleryAlbumResponse,
+  type GalleryCategory,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
-interface GalleryImage {
-  id: string;
-  imageUrl: string;
-}
+type GalleryAlbum = GalleryAlbumResponse;
 
-interface GalleryAlbum {
-  id: string;
-  title: string;
-  subtitle: string;
-  category:
-    | "INFRASTRUCTURE"
-    | "EVENTS"
-    | "WORKSPACE"
-    | "FACILITIES"
-    | "ACTIVITIES"
-    | "OTHER";
-  isActive: boolean;
-  coverImage: GalleryImage | null;
-  images: GalleryImage[];
-  updatedAt: string;
-}
-
-const formatCategory = (category: GalleryAlbum["category"]) =>
+const formatCategory = (category: GalleryCategory) =>
   category
     .toLowerCase()
     .split("_")
@@ -45,75 +35,54 @@ export default function GalleryListPage() {
   const { accessToken } = useAuthStore();
   const [albums, setAlbums] = useState<GalleryAlbum[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const fetchAlbums = async () => {
+  const fetchAlbums = useCallback(async () => {
     if (!accessToken) return;
 
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:4000/api/admin/gallery", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await getAdminGalleryAlbums();
       setAlbums(data);
-    } catch {
-      toast.error("Failed to load galleries");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to load galleries"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken]);
 
   useEffect(() => {
     fetchAlbums();
-  }, [accessToken]);
+  }, [fetchAlbums]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this album?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this album?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
+      setDeletingId(id);
 
-      const res = await fetch(`http://localhost:4000/api/admin/gallery/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
+      await deleteAdminGalleryAlbum(id);
 
       setAlbums((prev) => prev.filter((album) => album.id !== id));
       toast.success("Gallery deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
   const handleToggleStatus = async (id: string) => {
     try {
-      setLoading(true);
+      setTogglingId(id);
 
-      const res = await fetch(
-        `http://localhost:4000/api/admin/gallery/${id}/toggle`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await toggleAdminGalleryAlbumStatus(id);
       const updatedGallery = data.gallery;
 
       setAlbums((prev) =>
@@ -123,10 +92,10 @@ export default function GalleryListPage() {
       );
 
       toast.success("Gallery status updated");
-    } catch {
-      toast.error("Status update failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Status update failed"));
     } finally {
-      setLoading(false);
+      setTogglingId(null);
     }
   };
 
@@ -236,17 +205,27 @@ export default function GalleryListPage() {
                   </button>
                   <button
                     onClick={() => handleToggleStatus(album.id)}
+                    disabled={togglingId === album.id}
                     className="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
                     title={album.isActive ? "Deactivate" : "Activate"}
                   >
-                    <Power className="w-4 h-4" />
+                    {togglingId === album.id ? (
+                      <LoadingIndicator label="Updating..." className="text-xs" />
+                    ) : (
+                      <Power className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => handleDelete(album.id)}
-                    className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    disabled={deletingId === album.id}
+                    className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     title="Delete"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deletingId === album.id ? (
+                      <LoadingIndicator label="Deleting..." className="text-xs" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>

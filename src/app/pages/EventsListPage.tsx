@@ -1,50 +1,34 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Search,
-  Calendar,
-  Clock,
-  MapPin,
-} from "lucide-react";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
-
-interface EventItem {
-  id: string;
-  title: string;
-  eventDate: string;
-  location: string;
-  isPublished: boolean;
-}
+import {
+  deleteAdminEvent,
+  getAdminEvents,
+  getErrorMessage,
+  type EventItemResponse,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 export function EventsListPage() {
   const navigate = useNavigate();
   const { accessToken } = useAuthStore();
 
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<EventItemResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-
-        const res = await fetch("http://localhost:4000/api/admin/events", {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
+        const data = await getAdminEvents();
         setEvents(data);
-      } catch {
-        toast.error("Failed to load events");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load events"));
       } finally {
         setLoading(false);
       }
@@ -54,26 +38,21 @@ export function EventsListPage() {
   }, [accessToken]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this event?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this event?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
-
-      const res = await fetch(`http://localhost:4000/api/admin/events/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
+      setDeletingId(id);
+      await deleteAdminEvent(id);
       setEvents((prev) => prev.filter((e) => e.id !== id));
       toast.success("Event deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
@@ -107,9 +86,7 @@ export function EventsListPage() {
         </button>
       </div>
 
-      {loading && (
-        <p className="text-sm text-muted-foreground mb-4">Loading...</p>
-      )}
+      {loading && <p className="text-sm text-muted-foreground mb-4">Loading...</p>}
 
       <input
         type="text"
@@ -131,23 +108,25 @@ export function EventsListPage() {
                 {new Date(event.eventDate).toLocaleDateString()}
               </p>
 
-              <p className="text-sm text-muted-foreground mb-3">
-                {event.location}
-              </p>
+              <p className="text-sm text-muted-foreground mb-3">{event.location}</p>
 
-              <span className="text-xs px-3 py-1 bg-muted rounded-full">
-                {status}
-              </span>
+              <span className="text-xs px-3 py-1 bg-muted rounded-full">{status}</span>
 
               <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => navigate(`/dashboard/events/${event.id}/edit`)}
-                >
+                <button onClick={() => navigate(`/dashboard/events/${event.id}/edit`)}>
                   <Edit className="w-4 h-4 text-primary" />
                 </button>
 
-                <button onClick={() => handleDelete(event.id)}>
-                  <Trash2 className="w-4 h-4 text-destructive" />
+                <button
+                  onClick={() => handleDelete(event.id)}
+                  disabled={deletingId === event.id}
+                  className="text-destructive disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {deletingId === event.id ? (
+                    <LoadingIndicator label="Deleting..." className="text-xs" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  )}
                 </button>
               </div>
             </div>

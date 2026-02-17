@@ -3,18 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, Search, Filter } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import toast from "react-hot-toast";
-
-interface NewsItem {
-  id: string;
-  title: string;
-  isPublished: boolean;
-  createdAt: string;
-}
+import {
+  deleteAdminNews,
+  getAdminNews,
+  getErrorMessage,
+  type NewsItemResponse,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 export function NewsListPage() {
-  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [newsItems, setNewsItems] = useState<NewsItemResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<
     "All" | "Published" | "Draft"
   >("All");
@@ -22,21 +24,14 @@ export function NewsListPage() {
   const navigate = useNavigate();
   const accessToken = useAuthStore((state) => state.accessToken);
 
-  // 🔥 Fetch News
   useEffect(() => {
     const fetchNews = async () => {
       try {
         setLoading(true);
-        const res = await fetch("http://localhost:4000/api/admin/news", {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        const data = await res.json();
+        const data = await getAdminNews();
         setNewsItems(data);
-      } catch (err) {
-        toast.error("Failed to fetch news");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to fetch news"));
       } finally {
         setLoading(false);
       }
@@ -45,28 +40,22 @@ export function NewsListPage() {
     if (accessToken) fetchNews();
   }, [accessToken]);
 
-  // 🔥 Delete
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this news item?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this news item?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
-      const response = await fetch(
-        `http://localhost:4000/api/admin/news/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-      if (!response.ok) throw new Error();
+      setDeletingId(id);
+      await deleteAdminNews(id);
       setNewsItems((prev) => prev.filter((item) => item.id !== id));
       toast.success("News item deleted");
-    } catch (err) {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
@@ -105,7 +94,6 @@ export function NewsListPage() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="bg-card border border-border rounded-lg p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
@@ -136,12 +124,10 @@ export function NewsListPage() {
         </div>
       </div>
 
-      {/* Loading Indicator */}
       {loading && (
         <div className="mb-4 text-sm text-muted-foreground">Loading...</div>
       )}
 
-      {/* Table */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <table className="w-full">
           <thead className="bg-muted border-b border-border">
@@ -186,9 +172,14 @@ export function NewsListPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(item.id)}
-                      className="p-2 text-destructive"
+                      disabled={deletingId === item.id}
+                      className="p-2 text-destructive disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {deletingId === item.id ? (
+                        <LoadingIndicator label="Deleting..." className="text-xs" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </td>
                 </tr>

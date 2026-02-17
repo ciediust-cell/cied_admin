@@ -1,141 +1,82 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   Filter,
   Eye,
-  Trash2,
   X,
   Mail,
   Phone,
   Calendar,
   MessageSquare,
 } from "lucide-react";
-
-interface Enquiry {
-  id: number;
-  name: string;
-  email: string;
-  phone?: string;
-  subject: string;
-  message: string;
-  date: string;
-  status: "New" | "Read" | "Responded";
-}
-
-const mockEnquiriesData: Enquiry[] = [
-  {
-    id: 1,
-    name: "John Anderson",
-    email: "john.anderson@email.com",
-    phone: "+1 (555) 234-5678",
-    subject: "Admission Process for Grade 9",
-    message:
-      "Hello, I would like to know more about the admission process for Grade 9. What are the requirements and when does the application period start? Also, could you provide information about the entrance exam?",
-    date: "2026-02-10",
-    status: "New",
-  },
-  {
-    id: 2,
-    name: "Maria Rodriguez",
-    email: "maria.r@email.com",
-    phone: "+1 (555) 345-6789",
-    subject: "Information about Science Program",
-    message:
-      "I am interested in learning more about your Science program. What subjects are covered and what are the laboratory facilities like? My daughter is particularly interested in Biology and Chemistry.",
-    date: "2026-02-09",
-    status: "New",
-  },
-  {
-    id: 3,
-    name: "David Chen",
-    email: "david.chen@email.com",
-    subject: "Sports Facilities Inquiry",
-    message:
-      "Could you provide details about the sports facilities available? Does the school have a swimming pool and basketball courts? Also, are there any competitive sports teams?",
-    date: "2026-02-09",
-    status: "Read",
-  },
-  {
-    id: 4,
-    name: "Sarah Williams",
-    email: "sarah.w@email.com",
-    phone: "+1 (555) 456-7890",
-    subject: "Scholarship Opportunities",
-    message:
-      "I am writing to inquire about scholarship opportunities for academically talented students. What are the eligibility criteria and application process for merit-based scholarships?",
-    date: "2026-02-08",
-    status: "Responded",
-  },
-  {
-    id: 5,
-    name: "Michael Thompson",
-    email: "michael.t@email.com",
-    subject: "Transfer Student Inquiry",
-    message:
-      "My family is relocating to the area and I would like to transfer my son to your institution for Grade 10. What is the process for mid-year transfers?",
-    date: "2026-02-08",
-    status: "Read",
-  },
-  {
-    id: 6,
-    name: "Emily Davis",
-    email: "emily.davis@email.com",
-    phone: "+1 (555) 567-8901",
-    subject: "After-School Programs",
-    message:
-      "Do you offer after-school programs? I am particularly interested in music and arts programs for elementary students.",
-    date: "2026-02-07",
-    status: "Responded",
-  },
-  {
-    id: 7,
-    name: "Robert Martinez",
-    email: "r.martinez@email.com",
-    subject: "Transportation Services",
-    message:
-      "Does the school provide transportation services? If so, what areas are covered and what are the costs involved?",
-    date: "2026-02-07",
-    status: "Responded",
-  },
-  {
-    id: 8,
-    name: "Lisa Johnson",
-    email: "lisa.j@email.com",
-    phone: "+1 (555) 678-9012",
-    subject: "Parent-Teacher Meeting Schedule",
-    message:
-      "When is the next parent-teacher meeting scheduled? I would like to discuss my child's academic progress.",
-    date: "2026-02-06",
-    status: "Responded",
-  },
-];
+import toast from "react-hot-toast";
+import { useAuthStore } from "../../store/authStore";
+import {
+  getAdminEnquiries,
+  getErrorMessage,
+  markEnquiryAsRead,
+  type EnquiryResponse,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 export function EnquiriesListPage() {
-  const [enquiries, setEnquiries] = useState<Enquiry[]>(mockEnquiriesData);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const [enquiries, setEnquiries] = useState<EnquiryResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "All" | "New" | "Read" | "Responded"
-  >("All");
-  const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"All" | "New" | "Read">(
+    "All",
+  );
+  const [selectedEnquiry, setSelectedEnquiry] =
+    useState<EnquiryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [markingReadIds, setMarkingReadIds] = useState<string[]>([]);
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this enquiry?")) {
-      setEnquiries(enquiries.filter((enquiry) => enquiry.id !== id));
-      if (selectedEnquiry?.id === id) {
-        setSelectedEnquiry(null);
-      }
+  const fetchEnquiries = async () => {
+    try {
+      setLoading(true);
+      const data = await getAdminEnquiries();
+      setEnquiries(data);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to fetch enquiries"));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleViewDetails = (enquiry: Enquiry) => {
+  useEffect(() => {
+    if (!accessToken) return;
+    fetchEnquiries();
+  }, [accessToken]);
+
+  const updateLocalReadState = (id: string) => {
+    setEnquiries((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)),
+    );
+    setSelectedEnquiry((prev) =>
+      prev && prev.id === id ? { ...prev, isRead: true } : prev,
+    );
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    if (markingReadIds.includes(id)) return;
+
+    try {
+      setMarkingReadIds((prev) => [...prev, id]);
+      await markEnquiryAsRead(id);
+
+      updateLocalReadState(id);
+      toast.success("Marked as read");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to mark as read"));
+    } finally {
+      setMarkingReadIds((prev) => prev.filter((itemId) => itemId !== id));
+    }
+  };
+
+  const handleViewDetails = async (enquiry: EnquiryResponse) => {
     setSelectedEnquiry(enquiry);
-    // Mark as read when viewed
-    if (enquiry.status === "New") {
-      setEnquiries(
-        enquiries.map((e) =>
-          e.id === enquiry.id ? { ...e, status: "Read" as const } : e,
-        ),
-      );
+    if (!enquiry.isRead) {
+      await handleMarkAsRead(enquiry.id);
     }
   };
 
@@ -143,32 +84,22 @@ export function EnquiriesListPage() {
     setSelectedEnquiry(null);
   };
 
-  const handleMarkAsResponded = (id: number) => {
-    setEnquiries(
-      enquiries.map((e) =>
-        e.id === id ? { ...e, status: "Responded" as const } : e,
-      ),
-    );
-    if (selectedEnquiry?.id === id) {
-      setSelectedEnquiry({ ...selectedEnquiry, status: "Responded" });
-    }
-  };
-
   const filteredEnquiries = enquiries.filter((enquiry) => {
     const matchesSearch =
-      enquiry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      enquiry.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       enquiry.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       enquiry.subject.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "All" || enquiry.status === statusFilter;
+
+    const status = enquiry.isRead ? "Read" : "New";
+    const matchesStatus = statusFilter === "All" || status === statusFilter;
+
     return matchesSearch && matchesStatus;
   });
 
   const stats = {
     total: enquiries.length,
-    new: enquiries.filter((e) => e.status === "New").length,
-    read: enquiries.filter((e) => e.status === "Read").length,
-    responded: enquiries.filter((e) => e.status === "Responded").length,
+    new: enquiries.filter((e) => !e.isRead).length,
+    read: enquiries.filter((e) => e.isRead).length,
   };
 
   return (
@@ -194,10 +125,6 @@ export function EnquiriesListPage() {
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm mb-1">Read</p>
           <p className="text-2xl text-foreground">{stats.read}</p>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm mb-1">Responded</p>
-          <p className="text-2xl text-foreground">{stats.responded}</p>
         </div>
       </div>
 
@@ -229,11 +156,14 @@ export function EnquiriesListPage() {
               <option value="All">All Status</option>
               <option value="New">New</option>
               <option value="Read">Read</option>
-              <option value="Responded">Responded</option>
             </select>
           </div>
         </div>
       </div>
+
+      {loading && (
+        <p className="text-sm text-muted-foreground mb-4">Loading enquiries...</p>
+      )}
 
       {/* Enquiries Table */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -266,7 +196,7 @@ export function EnquiriesListPage() {
                     className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
                   >
                     <td className="px-6 py-4">
-                      <p className="text-foreground">{enquiry.name}</p>
+                      <p className="text-foreground">{enquiry.fullName}</p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-muted-foreground text-sm">
@@ -277,7 +207,7 @@ export function EnquiriesListPage() {
                       <p className="text-foreground">{enquiry.subject}</p>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">
-                      {new Date(enquiry.date).toLocaleDateString("en-US", {
+                      {new Date(enquiry.createdAt).toLocaleDateString("en-US", {
                         year: "numeric",
                         month: "short",
                         day: "numeric",
@@ -286,14 +216,12 @@ export function EnquiriesListPage() {
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex px-3 py-1 rounded-full text-xs ${
-                          enquiry.status === "New"
+                          !enquiry.isRead
                             ? "bg-blue-100 text-blue-700"
-                            : enquiry.status === "Read"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
-                        {enquiry.status}
+                        {enquiry.isRead ? "Read" : "New"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -304,13 +232,6 @@ export function EnquiriesListPage() {
                           title="View details"
                         >
                           <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(enquiry.id)}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -353,18 +274,16 @@ export function EnquiriesListPage() {
               <div className="flex items-center justify-between">
                 <span
                   className={`inline-flex px-3 py-1 rounded-full text-xs ${
-                    selectedEnquiry.status === "New"
+                    !selectedEnquiry.isRead
                       ? "bg-blue-100 text-blue-700"
-                      : selectedEnquiry.status === "Read"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-green-100 text-green-700"
+                      : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
-                  {selectedEnquiry.status}
+                  {selectedEnquiry.isRead ? "Read" : "New"}
                 </span>
                 <div className="flex items-center gap-1 text-muted-foreground text-sm">
                   <Calendar className="w-4 h-4" />
-                  {new Date(selectedEnquiry.date).toLocaleDateString("en-US", {
+                  {new Date(selectedEnquiry.createdAt).toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "long",
                     day: "numeric",
@@ -379,10 +298,10 @@ export function EnquiriesListPage() {
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                       <span className="text-primary text-sm">
-                        {selectedEnquiry.name.charAt(0).toUpperCase()}
+                        {selectedEnquiry.fullName.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    <p className="text-foreground">{selectedEnquiry.name}</p>
+                    <p className="text-foreground">{selectedEnquiry.fullName}</p>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Mail className="w-4 h-4" />
@@ -436,12 +355,17 @@ export function EnquiriesListPage() {
                 Close
               </button>
               <div className="flex items-center gap-2">
-                {selectedEnquiry.status !== "Responded" && (
+                {!selectedEnquiry.isRead && (
                   <button
-                    onClick={() => handleMarkAsResponded(selectedEnquiry.id)}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+                    onClick={() => handleMarkAsRead(selectedEnquiry.id)}
+                    disabled={markingReadIds.includes(selectedEnquiry.id)}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Mark as Responded
+                    {markingReadIds.includes(selectedEnquiry.id) ? (
+                      <LoadingIndicator label="Updating..." />
+                    ) : (
+                      "Mark as Read"
+                    )}
                   </button>
                 )}
                 <a

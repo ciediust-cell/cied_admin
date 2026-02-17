@@ -12,6 +12,13 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  createAdminEvent,
+  getAdminEventById,
+  getErrorMessage,
+  updateAdminEvent,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface EventFormPageProps {
   mode: "create" | "edit";
@@ -42,18 +49,7 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
       try {
         setLoading(true);
 
-        const res = await fetch(
-          `http://localhost:4000/api/admin/events/${eventId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          },
-        );
-
-        if (!res.ok) throw new Error();
-
-        const existing = await res.json();
+        const existing = await getAdminEventById(eventId);
 
         setTitle(existing.title);
         setDescription(existing.description || "");
@@ -68,8 +64,8 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
         }
 
         setRegistrationUrl(existing.registrationUrl || "");
-      } catch {
-        toast.error("Failed to load event");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load event"));
       } finally {
         setLoading(false);
       }
@@ -131,24 +127,10 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
         formData.append("registrationUrl", registrationUrl.trim());
       if (imageFile) formData.append("image", imageFile);
 
-      const url =
-        mode === "create"
-          ? "http://localhost:4000/api/admin/events"
-          : `http://localhost:4000/api/admin/events/${eventId}`;
-
-      const method = mode === "create" ? "POST" : "PUT";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Request failed");
+      if (mode === "create") {
+        await createAdminEvent(formData);
+      } else if (eventId) {
+        await updateAdminEvent(eventId, formData);
       }
 
       toast.success(
@@ -158,9 +140,9 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
       );
 
       navigate("/dashboard/events");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(
-        error?.message || (mode === "create" ? "Create failed" : "Update failed"),
+        getErrorMessage(error, mode === "create" ? "Create failed" : "Update failed"),
       );
     } finally {
       setLoading(false);
@@ -485,16 +467,24 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
             <div className="bg-card border border-border rounded-lg p-6 space-y-3">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" />
-                {mode === "create" ? "Create Event" : "Save Changes"}
+                {loading ? (
+                  <LoadingIndicator label="Saving..." />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {mode === "create" ? "Create Event" : "Save Changes"}
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={() => navigate("/dashboard/events")}
-                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors"
+                disabled={loading}
+                className="w-full bg-muted text-foreground px-4 py-3 rounded-md hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

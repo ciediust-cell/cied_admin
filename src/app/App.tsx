@@ -11,6 +11,8 @@ import ProgramFormPage from "./pages/ProgramFormPage";
 import GalleryListPage from "./pages/GalleryListPage";
 import GalleryDetailPage from "./pages/GalleryDetailPage";
 import GalleryFormPage from "./pages/GalleryFormPage";
+import { PortfolioListPage } from "./pages/PortfolioListPage";
+import PortfolioFormPage from "./pages/PortfolioFormPage";
 import { MembersListPage } from "./pages/MembersListPage";
 import MemberFormPage from "./pages/MemberFormPage";
 import { EnquiriesListPage } from "./pages/EnquiriesListPage";
@@ -73,6 +75,17 @@ export default function App() {
           <Route
             path="programs/:programId/edit"
             element={<ProgramFormPage mode="edit" />}
+          />
+
+          {/* Portfolio */}
+          <Route path="portfolio" element={<PortfolioListPage />} />
+          <Route
+            path="portfolio/createPortfolio"
+            element={<PortfolioFormPage mode="create" />}
+          />
+          <Route
+            path="portfolio/:portfolioId/edit"
+            element={<PortfolioFormPage mode="edit" />}
           />
 
           {/* Gallery */}

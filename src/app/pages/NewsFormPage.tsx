@@ -2,6 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import toast from "react-hot-toast";
+import {
+  createAdminNews,
+  getAdminNews,
+  getErrorMessage,
+  updateAdminNews,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface NewsFormPageProps {
   mode: "create" | "edit";
@@ -19,29 +26,26 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
   const [isPublished, setIsPublished] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
-  // 🔥 Load existing data in edit mode
   useEffect(() => {
-    if (mode === "edit" && newsId) {
-      const fetchNews = async () => {
-        const res = await fetch(`http://localhost:4000/api/admin/news`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
+    if (mode !== "edit" || !newsId || !accessToken) return;
 
-        const data = await res.json();
-        const existing = data.find((n: any) => n.id === newsId);
+    const fetchNews = async () => {
+      try {
+        const data = await getAdminNews();
+        const existing = data.find((n) => n.id === newsId);
 
         if (existing) {
           setTitle(existing.title);
-          setExcerpt(existing.excerpt);
-          setContent(existing.content);
+          setExcerpt(existing.excerpt || "");
+          setContent(existing.content || "");
           setIsPublished(existing.isPublished);
         }
-      };
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load news"));
+      }
+    };
 
-      fetchNews();
-    }
+    fetchNews();
   }, [mode, newsId, accessToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,24 +62,10 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
 
       if (file) formData.append("image", file);
 
-      const url =
-        mode === "create"
-          ? "http://localhost:4000/api/admin/news"
-          : `http://localhost:4000/api/admin/news/${newsId}`;
-
-      const method = mode === "create" ? "POST" : "PUT";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message);
+      if (mode === "create") {
+        await createAdminNews(formData);
+      } else if (newsId) {
+        await updateAdminNews(newsId, formData);
       }
 
       toast.success(
@@ -85,8 +75,8 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
       );
 
       navigate("/dashboard/news");
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to save news"));
     } finally {
       setLoading(false);
     }
@@ -94,9 +84,7 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
 
   return (
     <div className="p-8">
-      <h1 className="mb-6">
-        {mode === "create" ? "Create News" : "Edit News"}
-      </h1>
+      <h1 className="mb-6">{mode === "create" ? "Create News" : "Edit News"}</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
@@ -154,7 +142,13 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
           disabled={loading}
           className="bg-primary text-white px-6 py-2 rounded disabled:opacity-50"
         >
-          {loading ? "Saving..." : mode === "create" ? "Create" : "Update"}
+          {loading ? (
+            <LoadingIndicator label="Saving..." className="justify-center" />
+          ) : mode === "create" ? (
+            "Create"
+          ) : (
+            "Update"
+          )}
         </button>
       </form>
     </div>

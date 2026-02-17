@@ -1,6 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Shield, User, Mail, Phone, KeyRound } from "lucide-react";
+import { useAuthStore } from "../../store/authStore";
+import toast from "react-hot-toast";
+import { useAdminLogout } from "../hooks/useAdminLogout";
+import {
+  changeAdminPassword,
+  getAdminProfile,
+  getErrorMessage,
+  updateAdminProfile,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface AdminProfile {
   name: string;
@@ -12,18 +23,60 @@ interface AdminProfile {
 
 export function SettingsProfilePage() {
   const navigate = useNavigate();
+  const { accessToken, logout } = useAuthStore();
+  const logoutAndRedirect = useAdminLogout();
   const [profile, setProfile] = useState<AdminProfile>({
     name: "Admin User",
     email: "admin@cied.edu",
     phone: "+1 (555) 010-2000",
     role: "System Administrator",
-    lastLogin: "Feb 10, 2026 â€¢ 9:42 AM",
+    lastLogin: "Feb 10, 2026 - 9:42 AM",
   });
   const [passwords, setPasswords] = useState({
     current: "",
     next: "",
     confirm: "",
   });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const fetchProfile = async () => {
+      try {
+        setLoadingProfile(true);
+        const data = await getAdminProfile();
+
+        const rawRole = String(data.role || "admin");
+        const roleLabel =
+          rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase();
+
+        setProfile((prev) => ({
+          ...prev,
+          email: data.email,
+          role: roleLabel,
+          lastLogin: data.updatedAt
+            ? new Date(data.updatedAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })
+            : prev.lastLogin,
+        }));
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load profile"));
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    fetchProfile();
+  }, [accessToken]);
 
   const handleProfileChange = (
     field: keyof AdminProfile,
@@ -39,9 +92,74 @@ export function SettingsProfilePage() {
     setPasswords((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleLogout = () => {
-    if (confirm("Are you sure you want to log out?")) {
-      navigate("/");
+  const handleLogout = async () => {
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to log out?",
+      confirmText: "Log Out",
+      confirmClassName:
+        "bg-destructive text-destructive-foreground hover:opacity-90",
+    });
+    if (!confirmed) return;
+
+    try {
+      setLoggingOut(true);
+      await logoutAndRedirect();
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true);
+      const data = await updateAdminProfile({
+        email: profile.email,
+      });
+
+      if (data?.admin?.email) {
+        setProfile((prev) => ({ ...prev, email: data.admin.email }));
+      }
+
+      toast.success(data?.message || "Profile updated successfully");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to update profile"));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!passwords.current || !passwords.next || !passwords.confirm) {
+      toast.error("Please fill all password fields");
+      return;
+    }
+
+    if (passwords.next !== passwords.confirm) {
+      toast.error("New password and confirm password do not match");
+      return;
+    }
+
+    try {
+      setUpdatingPassword(true);
+      const data = await changeAdminPassword({
+        currentPassword: passwords.current,
+        newPassword: passwords.next,
+        confirmPassword: passwords.confirm,
+      });
+
+      setPasswords({
+        current: "",
+        next: "",
+        confirm: "",
+      });
+
+      toast.success(data?.message || "Password updated. Please login again.");
+      logout();
+      navigate("/login");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to change password"));
+    } finally {
+      setUpdatingPassword(false);
     }
   };
 
@@ -54,6 +172,10 @@ export function SettingsProfilePage() {
           Manage your account details and security preferences
         </p>
       </div>
+
+      {loadingProfile && (
+        <p className="text-sm text-muted-foreground mb-4">Loading profile...</p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Admin Details */}
@@ -116,8 +238,16 @@ export function SettingsProfilePage() {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
-              Save Changes
+            <button
+              onClick={handleSaveProfile}
+              disabled={savingProfile}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
+            >
+              {savingProfile ? (
+                <LoadingIndicator label="Saving..." />
+              ) : (
+                "Save Changes"
+              )}
             </button>
           </div>
         </div>
@@ -188,8 +318,16 @@ export function SettingsProfilePage() {
               </div>
             </div>
 
-            <button className="mt-6 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
-              Update Password
+            <button
+              onClick={handleUpdatePassword}
+              disabled={updatingPassword}
+              className="mt-6 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
+            >
+              {updatingPassword ? (
+                <LoadingIndicator label="Updating..." className="justify-center" />
+              ) : (
+                "Update Password"
+              )}
             </button>
           </div>
 
@@ -207,9 +345,14 @@ export function SettingsProfilePage() {
             </div>
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+              disabled={loggingOut}
+              className="w-full px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Log Out
+              {loggingOut ? (
+                <LoadingIndicator label="Logging out..." className="justify-center" />
+              ) : (
+                "Log Out"
+              )}
             </button>
           </div>
         </div>

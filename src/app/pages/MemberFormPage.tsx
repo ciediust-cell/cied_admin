@@ -3,12 +3,20 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Upload, X, Save, ArrowLeft, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  createAdminMember,
+  getAdminMemberById,
+  getErrorMessage,
+  updateAdminMember,
+  uploadAdminImage,
+  type MemberRole,
+  type MemberUpsertPayload,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface MemberFormPageProps {
   mode: "create" | "edit";
 }
-
-type MemberRole = "GOVERNANCE" | "MANAGEMENT" | "MENTOR" | "ADVISOR";
 
 const ROLE_OPTIONS: { label: string; value: MemberRole }[] = [
   { label: "Governance", value: "GOVERNANCE" },
@@ -45,15 +53,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
       try {
         setLoading(true);
 
-        const res = await fetch(`http://localhost:4000/api/admin/members/${memberId}`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
+        const data = await getAdminMemberById(memberId);
 
         setName(data.name || "");
         setDesignation(data.designation || "");
@@ -66,8 +66,8 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         setCurrentImageUrl(data.imageUrl || "");
         setCurrentImagePublicId(data.imagePublicId || "");
         setUploadedPhoto(data.imageUrl || null);
-      } catch {
-        toast.error("Failed to load member");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load member"));
       } finally {
         setLoading(false);
       }
@@ -105,26 +105,10 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
   };
 
   const uploadImage = async (file: File) => {
-    const formData = new FormData();
-    formData.append("image", file);
-
-    const res = await fetch("http://localhost:4000/api/admin/upload/image", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.message || "Image upload failed");
-    }
-
-    const data = await res.json();
+    const data = await uploadAdminImage(file);
     return {
-      imageUrl: data.imageUrl as string,
-      imagePublicId: data.publicId as string,
+      imageUrl: data.imageUrl,
+      imagePublicId: data.publicId,
     };
   };
 
@@ -158,7 +142,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         return;
       }
 
-      const payload: Record<string, any> = {
+      const payload: MemberUpsertPayload = {
         name: name.trim(),
         designation: designation.trim(),
         role,
@@ -183,24 +167,10 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         payload.imagePublicId = finalImagePublicId;
       }
 
-      const url =
-        mode === "create"
-          ? "http://localhost:4000/api/admin/members"
-          : `http://localhost:4000/api/admin/members/${memberId}`;
-      const method = mode === "create" ? "POST" : "PATCH";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Request failed");
+      if (mode === "create") {
+        await createAdminMember(payload);
+      } else if (memberId) {
+        await updateAdminMember(memberId, payload);
       }
 
       toast.success(
@@ -209,8 +179,10 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
           : "Member updated successfully",
       );
       navigate("/dashboard/members");
-    } catch (error: any) {
-      toast.error(error?.message || (mode === "create" ? "Create failed" : "Update failed"));
+    } catch (error: unknown) {
+      toast.error(
+        getErrorMessage(error, mode === "create" ? "Create failed" : "Update failed"),
+      );
     } finally {
       setLoading(false);
     }
@@ -456,13 +428,20 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
                   className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
                   disabled={loading}
                 >
-                  <Save className="w-4 h-4" />
-                  {mode === "create" ? "Create Member" : "Save Changes"}
+                  {loading ? (
+                    <LoadingIndicator label="Saving..." />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {mode === "create" ? "Create Member" : "Save Changes"}
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/dashboard/members")}
-                  className="flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-md hover:bg-accent transition-colors"
+                  disabled={loading}
+                  className="flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-md hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

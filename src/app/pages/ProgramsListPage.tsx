@@ -11,23 +11,21 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
-
-interface ProgramItem {
-  id: string;
-  title: string;
-  shortDescription: string;
-  duration: string;
-  eligibility: string;
-  applyEnabled: boolean;
-  isActive: boolean;
-  updatedAt: string;
-}
+import {
+  deleteAdminProgram,
+  getAdminPrograms,
+  getErrorMessage,
+  toggleAdminProgramStatus,
+  type ProgramItemResponse,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 export function ProgramsListPage() {
   const navigate = useNavigate();
   const { accessToken } = useAuthStore();
 
-  const [programs, setPrograms] = useState<ProgramItem[]>([]);
+  const [programs, setPrograms] = useState<ProgramItemResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">(
     "All",
@@ -36,6 +34,8 @@ export function ProgramsListPage() {
     "All",
   );
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -44,18 +44,10 @@ export function ProgramsListPage() {
       try {
         setLoading(true);
 
-        const res = await fetch("http://localhost:4000/api/admin/programs", {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
+        const data = await getAdminPrograms();
         setPrograms(data);
-      } catch {
-        toast.error("Failed to load programs");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load programs"));
       } finally {
         setLoading(false);
       }
@@ -65,46 +57,31 @@ export function ProgramsListPage() {
   }, [accessToken]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this program?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this program?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
+      setDeletingId(id);
 
-      const res = await fetch(`http://localhost:4000/api/admin/programs/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
+      await deleteAdminProgram(id);
 
       setPrograms((prev) => prev.filter((item) => item.id !== id));
       toast.success("Program deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
   const handleToggleStatus = async (id: string) => {
     try {
-      setLoading(true);
+      setTogglingId(id);
 
-      const res = await fetch(
-        `http://localhost:4000/api/admin/programs/${id}/toggle`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await toggleAdminProgramStatus(id);
       const updatedProgram = data.program;
 
       setPrograms((prev) =>
@@ -113,10 +90,10 @@ export function ProgramsListPage() {
         ),
       );
       toast.success("Program status updated");
-    } catch {
-      toast.error("Status update failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Status update failed"));
     } finally {
-      setLoading(false);
+      setTogglingId(null);
     }
   };
 
@@ -321,17 +298,27 @@ export function ProgramsListPage() {
                         </button>
                         <button
                           onClick={() => handleToggleStatus(program.id)}
+                          disabled={togglingId === program.id}
                           className="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
                           title={program.isActive ? "Deactivate" : "Activate"}
                         >
-                          <Power className="w-4 h-4" />
+                          {togglingId === program.id ? (
+                            <LoadingIndicator label="Updating..." className="text-xs" />
+                          ) : (
+                            <Power className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => handleDelete(program.id)}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                          disabled={deletingId === program.id}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           title="Delete"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deletingId === program.id ? (
+                            <LoadingIndicator label="Deleting..." className="text-xs" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </td>

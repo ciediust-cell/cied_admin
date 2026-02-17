@@ -3,6 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Save, ArrowLeft, Award } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  createAdminAward,
+  getAdminAwardById,
+  getErrorMessage,
+  updateAdminAward,
+  type AwardUpsertPayload,
+} from "../lib/adminApiClient";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 interface AwardFormPageProps {
   mode: "create" | "edit";
@@ -28,23 +36,15 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
       try {
         setLoading(true);
 
-        const res = await fetch(`http://localhost:4000/api/admin/awards/${awardId}`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
+        const data = await getAdminAwardById(awardId);
         setTitle(data.title || "");
         setYear(data.year?.toString() || new Date().getFullYear().toString());
         setDescription(data.description || "");
         setAwardedBy(data.awardedBy || "");
         setOrder(data.order?.toString() || "");
         setIsActive(Boolean(data.isActive));
-      } catch {
-        toast.error("Failed to load award");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to load award"));
       } finally {
         setLoading(false);
       }
@@ -67,7 +67,7 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
       return;
     }
 
-    const payload: Record<string, any> = {
+    const payload: AwardUpsertPayload = {
       title: title.trim(),
       awardedBy: awardedBy.trim(),
       year: parsedYear,
@@ -92,25 +92,10 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
     try {
       setLoading(true);
 
-      const url =
-        mode === "create"
-          ? "http://localhost:4000/api/admin/awards"
-          : `http://localhost:4000/api/admin/awards/${awardId}`;
-
-      const method = mode === "create" ? "POST" : "PATCH";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Request failed");
+      if (mode === "create") {
+        await createAdminAward(payload);
+      } else if (awardId) {
+        await updateAdminAward(awardId, payload);
       }
 
       toast.success(
@@ -119,8 +104,10 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
           : "Award updated successfully",
       );
       navigate("/dashboard/awards");
-    } catch (error: any) {
-      toast.error(error?.message || (mode === "create" ? "Create failed" : "Update failed"));
+    } catch (error: unknown) {
+      toast.error(
+        getErrorMessage(error, mode === "create" ? "Create failed" : "Update failed"),
+      );
     } finally {
       setLoading(false);
     }
@@ -300,13 +287,20 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
                   className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-md hover:opacity-90 transition-opacity disabled:opacity-60"
                   disabled={loading}
                 >
-                  <Save className="w-4 h-4" />
-                  {mode === "create" ? "Create Award" : "Save Changes"}
+                  {loading ? (
+                    <LoadingIndicator label="Saving..." />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {mode === "create" ? "Create Award" : "Save Changes"}
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/dashboard/awards")}
-                  className="flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-md hover:bg-accent transition-colors"
+                  disabled={loading}
+                  className="flex items-center justify-center gap-2 bg-muted text-foreground px-4 py-2.5 rounded-md hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

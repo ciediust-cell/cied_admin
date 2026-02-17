@@ -10,29 +10,21 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  deleteAdminGalleryImage,
+  getAdminGalleryById,
+  getErrorMessage,
+  setAdminGalleryCoverImage,
+  uploadAdminGalleryImages,
+  type GalleryCategory,
+  type GalleryDetailResponse,
+  type GalleryImageResponse,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
-type GalleryCategory =
-  | "INFRASTRUCTURE"
-  | "EVENTS"
-  | "WORKSPACE"
-  | "FACILITIES"
-  | "ACTIVITIES"
-  | "OTHER";
-
-interface GalleryImage {
-  id: string;
-  imageUrl: string;
-  caption: string | null;
-}
-
-interface Gallery {
-  id: string;
-  title: string;
-  subtitle: string;
-  category: GalleryCategory;
-  coverImageId: string | null;
-  images: GalleryImage[];
-}
+type GalleryImage = GalleryImageResponse;
+type Gallery = GalleryDetailResponse;
 
 const formatCategory = (category: GalleryCategory) =>
   category
@@ -50,6 +42,8 @@ export default function GalleryDetailPage() {
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const [settingCoverId, setSettingCoverId] = useState<string | null>(null);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
   const fetchGallery = useCallback(async () => {
     if (!albumId || !accessToken) return;
@@ -57,18 +51,10 @@ export default function GalleryDetailPage() {
     try {
       setLoading(true);
 
-      const res = await fetch(`http://localhost:4000/api/admin/gallery/${albumId}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await getAdminGalleryById(albumId);
       setGallery(data);
-    } catch {
-      toast.error("Failed to load gallery");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to load gallery"));
     } finally {
       setLoading(false);
     }
@@ -92,49 +78,37 @@ export default function GalleryDetailPage() {
     if (!gallery) return;
 
     try {
-      const res = await fetch(
-        `http://localhost:4000/api/admin/gallery/${gallery.id}/cover/${imageId}`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      setSettingCoverId(imageId);
+      const data = await setAdminGalleryCoverImage(gallery.id, imageId);
       setGallery((prev) =>
         prev ? { ...prev, coverImageId: data.gallery.coverImageId } : prev,
       );
       toast.success("Cover image updated");
-    } catch {
-      toast.error("Failed to set cover image");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to set cover image"));
+    } finally {
+      setSettingCoverId(null);
     }
   };
 
   const handleDelete = async (imageId: string) => {
-    if (!confirm("Are you sure you want to delete this image?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this image?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      const res = await fetch(
-        `http://localhost:4000/api/admin/gallery/image/${imageId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      if (!res.ok) throw new Error();
+      setDeletingImageId(imageId);
+      await deleteAdminGalleryImage(imageId);
 
       setSelectedImage((prev) => (prev?.id === imageId ? null : prev));
       await fetchGallery();
       toast.success("Image deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
+    } finally {
+      setDeletingImageId(null);
     }
   };
 
@@ -145,29 +119,12 @@ export default function GalleryDetailPage() {
     try {
       setIsUploading(true);
 
-      const formData = new FormData();
-      Array.from(files).forEach((file) => formData.append("images", file));
-
-      const res = await fetch(
-        `http://localhost:4000/api/admin/gallery/${gallery.id}/images`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: formData,
-        },
-      );
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.message || "Upload failed");
-      }
+      await uploadAdminGalleryImages(gallery.id, Array.from(files));
 
       await fetchGallery();
       toast.success("Images uploaded");
-    } catch (error: any) {
-      toast.error(error?.message || "Upload failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Upload failed"));
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -234,8 +191,14 @@ export default function GalleryDetailPage() {
               className="hidden"
               disabled={isUploading}
             />
-            <Upload className="w-4 h-4" />
-            {isUploading ? "Uploading..." : "Upload Images"}
+            {isUploading ? (
+              <LoadingIndicator label="Uploading..." />
+            ) : (
+              <>
+                <Upload className="w-4 h-4" />
+                Upload Images
+              </>
+            )}
           </label>
         </div>
       </div>
@@ -288,24 +251,34 @@ export default function GalleryDetailPage() {
                     e.stopPropagation();
                     handleSetCover(image.id);
                   }}
+                  disabled={settingCoverId === image.id}
                   className={`p-2.5 rounded-lg transition-colors ${
                     image.isCover
                       ? "bg-yellow-500 text-white"
                       : "bg-white/90 text-foreground hover:bg-white"
-                  }`}
+                  } disabled:opacity-60 disabled:cursor-not-allowed`}
                   title={image.isCover ? "Current cover" : "Set as cover"}
                 >
-                  <Star className={`w-4 h-4 ${image.isCover ? "fill-current" : ""}`} />
+                  {settingCoverId === image.id ? (
+                    <LoadingIndicator label="Updating..." className="text-xs" />
+                  ) : (
+                    <Star className={`w-4 h-4 ${image.isCover ? "fill-current" : ""}`} />
+                  )}
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(image.id);
                   }}
-                  className="p-2.5 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-opacity"
+                  disabled={deletingImageId === image.id}
+                  className="p-2.5 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
                   title="Delete image"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {deletingImageId === image.id ? (
+                    <LoadingIndicator label="Deleting..." className="text-xs" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -338,28 +311,44 @@ export default function GalleryDetailPage() {
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/95 backdrop-blur-sm rounded-full px-4 py-3 shadow-lg">
               <button
                 onClick={() => handleSetCover(selectedImage.id)}
+                disabled={settingCoverId === selectedImage.id}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
                   selectedImage.id === coverImageId
                     ? "bg-yellow-100 text-yellow-700"
                     : "hover:bg-gray-100 text-foreground"
-                }`}
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
               >
-                <Star
-                  className={`w-4 h-4 ${
-                    selectedImage.id === coverImageId ? "fill-current" : ""
-                  }`}
-                />
-                <span className="text-sm">
-                  {selectedImage.id === coverImageId ? "Cover Image" : "Set as Cover"}
-                </span>
+                {settingCoverId === selectedImage.id ? (
+                  <LoadingIndicator label="Updating..." className="text-sm" />
+                ) : (
+                  <>
+                    <Star
+                      className={`w-4 h-4 ${
+                        selectedImage.id === coverImageId ? "fill-current" : ""
+                      }`}
+                    />
+                    <span className="text-sm">
+                      {selectedImage.id === coverImageId
+                        ? "Cover Image"
+                        : "Set as Cover"}
+                    </span>
+                  </>
+                )}
               </button>
               <div className="w-px h-6 bg-border"></div>
               <button
                 onClick={() => handleDelete(selectedImage.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full hover:bg-red-50 text-destructive transition-colors"
+                disabled={deletingImageId === selectedImage.id}
+                className="flex items-center gap-2 px-4 py-2 rounded-full hover:bg-red-50 text-destructive transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Trash2 className="w-4 h-4" />
-                <span className="text-sm">Delete</span>
+                {deletingImageId === selectedImage.id ? (
+                  <LoadingIndicator label="Deleting..." className="text-sm" />
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-sm">Delete</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

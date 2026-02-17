@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, Search, Award, Calendar, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import {
+  deleteAdminAward,
+  getAdminAwards,
+  getErrorMessage,
+  updateAdminAward,
+  type AwardResponse,
+} from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
+import { LoadingIndicator } from "../components/ui/loading-indicator";
 
-interface AwardItem {
-  id: string;
-  title: string;
-  year: number;
-  description: string;
-  awardedBy: string;
-  order: number;
-  isActive: boolean;
-}
+type AwardItem = AwardResponse;
 
 export function AwardsListPage() {
   const navigate = useNavigate();
@@ -21,70 +22,53 @@ export function AwardsListPage() {
   const [awards, setAwards] = useState<AwardItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const fetchAwards = async () => {
+  const fetchAwards = useCallback(async () => {
     if (!accessToken) return;
 
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:4000/api/admin/awards", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = await getAdminAwards();
       setAwards(data);
-    } catch {
-      toast.error("Failed to load awards");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to load awards"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken]);
 
   useEffect(() => {
     fetchAwards();
-  }, [accessToken]);
+  }, [fetchAwards]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this award?")) return;
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this award?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
 
     try {
-      setLoading(true);
+      setDeletingId(id);
 
-      const res = await fetch(`http://localhost:4000/api/admin/awards/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
+      await deleteAdminAward(id);
 
       setAwards((prev) => prev.filter((award) => award.id !== id));
       toast.success("Award deleted");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Delete failed"));
     } finally {
-      setLoading(false);
+      setDeletingId(null);
     }
   };
 
   const handleToggleActive = async (award: AwardItem) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/admin/awards/${award.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ isActive: !award.isActive }),
-      });
-
-      if (!res.ok) throw new Error();
+      setTogglingId(award.id);
+      await updateAdminAward(award.id, { isActive: !award.isActive });
 
       setAwards((prev) =>
         prev.map((item) =>
@@ -93,8 +77,10 @@ export function AwardsListPage() {
       );
 
       toast.success("Award status updated");
-    } catch {
-      toast.error("Status update failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Status update failed"));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -243,13 +229,16 @@ export function AwardsListPage() {
                                 </span>
                                 <button
                                   onClick={() => handleToggleActive(award)}
+                                  disabled={togglingId === award.id}
                                   className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
                                     award.isActive
                                       ? "bg-green-100 text-green-700 hover:bg-green-200"
                                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                                  }`}
+                                  } disabled:opacity-60 disabled:cursor-not-allowed`}
                                 >
-                                  {award.isActive ? (
+                                  {togglingId === award.id ? (
+                                    <LoadingIndicator label="Updating..." className="text-xs" />
+                                  ) : award.isActive ? (
                                     <>
                                       <Eye className="w-3 h-3" />
                                       Active
@@ -282,10 +271,15 @@ export function AwardsListPage() {
                           </button>
                           <button
                             onClick={() => handleDelete(award.id)}
-                            className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                            disabled={deletingId === award.id}
+                            className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             title="Delete"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {deletingId === award.id ? (
+                              <LoadingIndicator label="Deleting..." className="text-xs" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>

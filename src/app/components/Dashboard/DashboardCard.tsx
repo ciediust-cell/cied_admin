@@ -19,6 +19,14 @@ interface StatCardProps {
   color: string;
 }
 
+export interface DashboardStats {
+  totalNews: number;
+  totalEvents: number;
+  totalPrograms: number;
+  totalGalleryAlbums: number;
+  totalEnquiries: number;
+}
+
 function StatCard({ title, value, icon, trend, color }: StatCardProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -52,54 +60,52 @@ function StatCard({ title, value, icon, trend, color }: StatCardProps) {
   );
 }
 
-export function DashboardCards() {
-  const stats = [
+interface DashboardCardsProps {
+  stats: DashboardStats;
+}
+
+export function DashboardCards({ stats }: DashboardCardsProps) {
+  const statCards = [
     {
       title: "Total News",
-      value: 156,
+      value: stats.totalNews,
       icon: <Newspaper className="w-6 h-6 text-white" />,
-      trend: { value: 12, isPositive: true },
       color: "#3b82f6",
     },
     {
       title: "Total Events",
-      value: 48,
+      value: stats.totalEvents,
       icon: <Calendar className="w-6 h-6 text-white" />,
-      trend: { value: 8, isPositive: true },
       color: "#8b5cf6",
     },
     {
       title: "Programs",
-      value: 24,
+      value: stats.totalPrograms,
       icon: <GraduationCap className="w-6 h-6 text-white" />,
-      trend: { value: 3, isPositive: false },
       color: "#f59e0b",
     },
     {
       title: "Gallery Albums",
-      value: 89,
+      value: stats.totalGalleryAlbums,
       icon: <Image className="w-6 h-6 text-white" />,
-      trend: { value: 15, isPositive: true },
       color: "#10b981",
     },
     {
       title: "Enquiries",
-      value: 342,
+      value: stats.totalEnquiries,
       icon: <MessageSquare className="w-6 h-6 text-white" />,
-      trend: { value: 23, isPositive: true },
       color: "#ef4444",
     },
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {stats.map((stat) => (
+      {statCards.map((stat) => (
         <StatCard
           key={stat.title}
           title={stat.title}
           value={stat.value}
           icon={stat.icon}
-          trend={stat.trend}
           color={stat.color}
         />
       ))}

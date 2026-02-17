@@ -2,6 +2,11 @@ import * as React from "react";
 
 const MOBILE_BREAKPOINT = 768;
 
+type LegacyMediaQueryList = MediaQueryList & {
+  addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+  removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+};
+
 export function useIsMobile() {
   const isClient =
     typeof window !== "undefined" && typeof window.matchMedia !== "undefined";
@@ -14,21 +19,18 @@ export function useIsMobile() {
   React.useEffect(() => {
     if (!isClient) return;
 
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    const onChange = (e: MediaQueryListEvent | MediaQueryList) => {
-      // `matches` exists on both types
-      // @ts-ignore - keep robust across TS lib differences
-      setIsMobile(e.matches ?? window.innerWidth < MOBILE_BREAKPOINT);
+    const mql = window.matchMedia(
+      `(max-width: ${MOBILE_BREAKPOINT - 1}px)`,
+    ) as LegacyMediaQueryList;
+    const onChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
     };
 
     if (typeof mql.addEventListener === "function") {
-      mql.addEventListener(
-        "change",
-        onChange as EventListenerOrEventListenerObject,
-      );
-    } else if (typeof (mql as any).addListener === "function") {
+      mql.addEventListener("change", onChange);
+    } else if (typeof mql.addListener === "function") {
       // older browsers
-      (mql as any).addListener(onChange);
+      mql.addListener(onChange);
     }
 
     // set initial
@@ -36,12 +38,9 @@ export function useIsMobile() {
 
     return () => {
       if (typeof mql.removeEventListener === "function") {
-        mql.removeEventListener(
-          "change",
-          onChange as EventListenerOrEventListenerObject,
-        );
-      } else if (typeof (mql as any).removeListener === "function") {
-        (mql as any).removeListener(onChange);
+        mql.removeEventListener("change", onChange);
+      } else if (typeof mql.removeListener === "function") {
+        mql.removeListener(onChange);
       }
     };
   }, [isClient]);
