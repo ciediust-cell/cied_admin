@@ -1,4 +1,18 @@
-const BASE_URL = "http://localhost:4000/api";
+const envApiOrigin =
+  (
+    import.meta as ImportMeta & {
+      env?: Record<string, string | undefined>;
+    }
+  ).env?.VITE_API_ORIGIN ?? "";
+
+const normalizedApiOrigin = envApiOrigin.trim();
+
+if (!normalizedApiOrigin) {
+  throw new Error("Missing VITE_API_ORIGIN. Set it in your .env file.");
+}
+
+const API_ORIGIN = normalizedApiOrigin.replace(/\/+$/, "");
+const BASE_URL = `${API_ORIGIN}/api`;
 
 export async function api<T>(
   endpoint: string,

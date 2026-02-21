@@ -18,6 +18,8 @@ interface MemberFormPageProps {
   mode: "create" | "edit";
 }
 
+const MAX_MEMBER_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
+
 const ROLE_OPTIONS: { label: string; value: MemberRole }[] = [
   { label: "Governance", value: "GOVERNANCE" },
   { label: "Management", value: "MANAGEMENT" },
@@ -35,7 +37,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
   const [name, setName] = useState("");
   const [designation, setDesignation] = useState("");
   const [role, setRole] = useState<MemberRole>("MANAGEMENT");
-  const [department, setDepartment] = useState("");
+  const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [order, setOrder] = useState("");
@@ -58,7 +60,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         setName(data.name || "");
         setDesignation(data.designation || "");
         setRole(data.role || "MANAGEMENT");
-        setDepartment(data.department || "");
+        setDescription(data.description || "");
         setEmail(data.email || "");
         setLinkedinUrl(data.linkedinUrl || "");
         setOrder(data.order?.toString() || "");
@@ -79,6 +81,18 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select a valid image file.");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_MEMBER_IMAGE_SIZE_BYTES) {
+      toast.error("Image is too large. Please upload an image up to 4MB.");
+      e.target.value = "";
+      return;
+    }
 
     setImageFile(file);
 
@@ -149,7 +163,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
         isActive,
       };
 
-      if (department.trim()) payload.department = department.trim();
+      if (description.trim()) payload.description = description.trim();
       if (email.trim()) payload.email = email.trim();
       if (linkedinUrl.trim()) payload.linkedinUrl = linkedinUrl.trim();
 
@@ -273,18 +287,18 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
 
                 <div>
                   <label
-                    htmlFor="department"
+                    htmlFor="description"
                     className="block text-foreground mb-2"
                   >
-                    Department
+                    Description
                   </label>
                   <input
-                    id="department"
+                    id="description"
                     type="text"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                     className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    placeholder="e.g., Administration"
+                    placeholder="e.g., Startup mentor and incubation specialist"
                   />
                 </div>
               </div>
@@ -374,7 +388,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
               )}
 
               <p className="text-xs text-muted-foreground mt-3">
-                Recommended: Square image, at least 400x400px
+                Recommended: Square image, at least 400x400px, max 4MB
               </p>
             </div>
 

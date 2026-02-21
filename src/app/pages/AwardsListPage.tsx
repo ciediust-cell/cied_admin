@@ -5,15 +5,17 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminAward,
-  getAdminAwards,
+  getAdminAwardsPaginated,
   getErrorMessage,
   updateAdminAward,
+  type PaginationMeta,
   type AwardResponse,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 type AwardItem = AwardResponse;
+const PAGE_SIZE = 20;
 
 export function AwardsListPage() {
   const navigate = useNavigate();
@@ -24,6 +26,13 @@ export function AwardsListPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   const fetchAwards = useCallback(async () => {
     if (!accessToken) return;
@@ -31,14 +40,18 @@ export function AwardsListPage() {
     try {
       setLoading(true);
 
-      const data = await getAdminAwards();
-      setAwards(data);
+      const data = await getAdminAwardsPaginated({
+        page,
+        limit: PAGE_SIZE,
+      });
+      setAwards(data.data);
+      setPagination(data.pagination);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to load awards"));
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => {
     fetchAwards();
@@ -55,8 +68,16 @@ export function AwardsListPage() {
       setDeletingId(id);
 
       await deleteAdminAward(id);
-
-      setAwards((prev) => prev.filter((award) => award.id !== id));
+      if (awards.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminAwardsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setAwards(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("Award deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -145,7 +166,7 @@ export function AwardsListPage() {
               <Award className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl text-foreground">{awards.length}</p>
+              <p className="text-2xl text-foreground">{pagination.total}</p>
               <p className="text-sm text-muted-foreground">Total Awards</p>
             </div>
           </div>
@@ -157,7 +178,7 @@ export function AwardsListPage() {
             </div>
             <div>
               <p className="text-2xl text-foreground">{sortedYears.length}</p>
-              <p className="text-sm text-muted-foreground">Years Covered</p>
+              <p className="text-sm text-muted-foreground">Years On This Page</p>
             </div>
           </div>
         </div>
@@ -170,7 +191,7 @@ export function AwardsListPage() {
               <p className="text-2xl text-foreground">
                 {awards.filter((award) => award.year === new Date().getFullYear()).length}
               </p>
-              <p className="text-sm text-muted-foreground">This Year</p>
+              <p className="text-sm text-muted-foreground">This Year On This Page</p>
             </div>
           </div>
         </div>
@@ -294,10 +315,33 @@ export function AwardsListPage() {
         {filteredAwards.length > 0 && (
           <div className="px-6 py-4 bg-muted border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredAwards.length} of {awards.length} awards
+              Showing {filteredAwards.length} of {awards.length} awards on this page
             </p>
           </div>
         )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

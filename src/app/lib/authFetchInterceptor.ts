@@ -6,6 +6,8 @@ import {
 
 const ADMIN_API_PREFIX = ADMIN_API_BASE;
 const LOGIN_URL = `${ADMIN_API_PREFIX}/auth/login`;
+const FORGOT_PASSWORD_URL = `${ADMIN_API_PREFIX}/auth/forgot-password`;
+const RESET_PASSWORD_URL = `${ADMIN_API_PREFIX}/auth/reset-password`;
 const REFRESH_URL = `${ADMIN_API_PREFIX}/auth/refresh`;
 const LOGOUT_URL = `${ADMIN_API_PREFIX}/auth/logout`;
 
@@ -41,6 +43,8 @@ function buildHeaders(
 function isProtectedAdminRequest(url: string): boolean {
   if (!url.startsWith(ADMIN_API_PREFIX)) return false;
   if (url.startsWith(LOGIN_URL)) return false;
+  if (url.startsWith(FORGOT_PASSWORD_URL)) return false;
+  if (url.startsWith(RESET_PASSWORD_URL)) return false;
   if (url.startsWith(REFRESH_URL)) return false;
   if (url.startsWith(LOGOUT_URL)) return false;
   return true;

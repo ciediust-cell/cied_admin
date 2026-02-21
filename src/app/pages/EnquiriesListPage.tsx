@@ -12,12 +12,15 @@ import {
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
-  getAdminEnquiries,
+  getAdminEnquiriesPaginated,
   getErrorMessage,
   markEnquiryAsRead,
   type EnquiryResponse,
+  type PaginationMeta,
 } from "../lib/adminApiClient";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
+
+const PAGE_SIZE = 20;
 
 export function EnquiriesListPage() {
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -30,23 +33,35 @@ export function EnquiriesListPage() {
     useState<EnquiryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [markingReadIds, setMarkingReadIds] = useState<string[]>([]);
-
-  const fetchEnquiries = async () => {
-    try {
-      setLoading(true);
-      const data = await getAdminEnquiries();
-      setEnquiries(data);
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to fetch enquiries"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   useEffect(() => {
     if (!accessToken) return;
+
+    const fetchEnquiries = async () => {
+      try {
+        setLoading(true);
+        const data = await getAdminEnquiriesPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setEnquiries(data.data);
+        setPagination(data.pagination);
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Failed to fetch enquiries"));
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchEnquiries();
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   const updateLocalReadState = (id: string) => {
     setEnquiries((prev) =>
@@ -97,7 +112,7 @@ export function EnquiriesListPage() {
   });
 
   const stats = {
-    total: enquiries.length,
+    total: pagination.total,
     new: enquiries.filter((e) => !e.isRead).length,
     read: enquiries.filter((e) => e.isRead).length,
   };
@@ -119,11 +134,11 @@ export function EnquiriesListPage() {
           <p className="text-2xl text-foreground">{stats.total}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm mb-1">New</p>
+          <p className="text-muted-foreground text-sm mb-1">New On This Page</p>
           <p className="text-2xl text-foreground">{stats.new}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm mb-1">Read</p>
+          <p className="text-muted-foreground text-sm mb-1">Read On This Page</p>
           <p className="text-2xl text-foreground">{stats.read}</p>
         </div>
       </div>
@@ -246,10 +261,33 @@ export function EnquiriesListPage() {
         {filteredEnquiries.length > 0 && (
           <div className="px-6 py-4 bg-muted border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredEnquiries.length} of {enquiries.length} enquiries
+              Showing {filteredEnquiries.length} of {enquiries.length} enquiries on this page
             </p>
           </div>
         )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {/* Enquiry Details Modal */}

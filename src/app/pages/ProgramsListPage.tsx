@@ -13,13 +13,16 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminProgram,
-  getAdminPrograms,
+  getAdminProgramsPaginated,
   getErrorMessage,
   toggleAdminProgramStatus,
+  type PaginationMeta,
   type ProgramItemResponse,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
+
+const PAGE_SIZE = 20;
 
 export function ProgramsListPage() {
   const navigate = useNavigate();
@@ -36,6 +39,13 @@ export function ProgramsListPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   useEffect(() => {
     if (!accessToken) return;
@@ -44,8 +54,12 @@ export function ProgramsListPage() {
       try {
         setLoading(true);
 
-        const data = await getAdminPrograms();
-        setPrograms(data);
+        const data = await getAdminProgramsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setPrograms(data.data);
+        setPagination(data.pagination);
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Failed to load programs"));
       } finally {
@@ -54,7 +68,7 @@ export function ProgramsListPage() {
     };
 
     fetchPrograms();
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirmToast({
@@ -67,8 +81,16 @@ export function ProgramsListPage() {
       setDeletingId(id);
 
       await deleteAdminProgram(id);
-
-      setPrograms((prev) => prev.filter((item) => item.id !== id));
+      if (programs.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminProgramsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setPrograms(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("Program deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -330,27 +352,44 @@ export function ProgramsListPage() {
         </div>
       )}
 
-      {programs.length > 0 && (
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {pagination.total > 0 && (
         <div className="mt-6 bg-card border border-border rounded-lg p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Total Programs
-              </p>
-              <p className="text-2xl text-foreground">{programs.length}</p>
+              <p className="text-sm text-muted-foreground mb-1">Total Programs</p>
+              <p className="text-2xl text-foreground">{pagination.total}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Active Programs
-              </p>
+              <p className="text-sm text-muted-foreground mb-1">Active On This Page</p>
               <p className="text-2xl text-green-600">
                 {programs.filter((item) => item.isActive).length}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Applications Enabled
-              </p>
+              <p className="text-sm text-muted-foreground mb-1">Applications Enabled On This Page</p>
               <p className="text-2xl text-blue-600">
                 {programs.filter((item) => item.applyEnabled).length}
               </p>

@@ -5,12 +5,15 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminEvent,
-  getAdminEvents,
+  getAdminEventsPaginated,
   getErrorMessage,
   type EventItemResponse,
+  type PaginationMeta,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
+
+const PAGE_SIZE = 20;
 
 export function EventsListPage() {
   const navigate = useNavigate();
@@ -20,13 +23,24 @@ export function EventsListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        const data = await getAdminEvents();
-        setEvents(data);
+        const data = await getAdminEventsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setEvents(data.data);
+        setPagination(data.pagination);
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Failed to load events"));
       } finally {
@@ -35,7 +49,7 @@ export function EventsListPage() {
     };
 
     if (accessToken) fetchEvents();
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirmToast({
@@ -47,7 +61,16 @@ export function EventsListPage() {
     try {
       setDeletingId(id);
       await deleteAdminEvent(id);
-      setEvents((prev) => prev.filter((e) => e.id !== id));
+      if (events.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminEventsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setEvents(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("Event deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -132,6 +155,29 @@ export function EventsListPage() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

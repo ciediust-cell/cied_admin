@@ -5,18 +5,28 @@ import { useAuthStore } from "../../store/authStore";
 import toast from "react-hot-toast";
 import {
   deleteAdminNews,
-  getAdminNews,
+  getAdminNewsPaginated,
   getErrorMessage,
   type NewsItemResponse,
+  type PaginationMeta,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
+
+const PAGE_SIZE = 20;
 
 export function NewsListPage() {
   const [newsItems, setNewsItems] = useState<NewsItemResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
   const [statusFilter, setStatusFilter] = useState<
     "All" | "Published" | "Draft"
   >("All");
@@ -28,8 +38,12 @@ export function NewsListPage() {
     const fetchNews = async () => {
       try {
         setLoading(true);
-        const data = await getAdminNews();
-        setNewsItems(data);
+        const data = await getAdminNewsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setNewsItems(data.data);
+        setPagination(data.pagination);
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Failed to fetch news"));
       } finally {
@@ -38,7 +52,7 @@ export function NewsListPage() {
     };
 
     if (accessToken) fetchNews();
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirmToast({
@@ -50,7 +64,16 @@ export function NewsListPage() {
     try {
       setDeletingId(id);
       await deleteAdminNews(id);
-      setNewsItems((prev) => prev.filter((item) => item.id !== id));
+      if (newsItems.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminNewsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setNewsItems(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("News item deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -187,6 +210,29 @@ export function NewsListPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

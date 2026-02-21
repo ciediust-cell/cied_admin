@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./pages/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import { NewsListPage } from "./pages/NewsListPage";
 import NewsFormPage from "./pages/NewsFormPage";
 import { EventsListPage } from "./pages/EventsListPage";
@@ -33,6 +35,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route
           path="/dashboard"

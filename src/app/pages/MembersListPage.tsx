@@ -14,16 +14,19 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminMember,
-  getAdminMembers,
+  getAdminMembersPaginated,
   getErrorMessage,
   updateAdminMember,
   type MemberResponse,
   type MemberRole,
+  type PaginationMeta,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 type Member = MemberResponse;
+
+const PAGE_SIZE = 20;
 
 const roleLabel = (role: MemberRole) =>
   role.charAt(0) + role.slice(1).toLowerCase();
@@ -41,21 +44,31 @@ export function MembersListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   const fetchMembers = useCallback(async () => {
     if (!accessToken) return;
 
     try {
       setLoading(true);
-
-      const data = await getAdminMembers();
-      setMembers(sortByOrder(data));
+      const data = await getAdminMembersPaginated({
+        page,
+        limit: PAGE_SIZE,
+      });
+      setMembers(sortByOrder(data.data));
+      setPagination(data.pagination);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to load members"));
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => {
     fetchMembers();
@@ -87,10 +100,19 @@ export function MembersListPage() {
 
     try {
       setDeletingId(id);
-
       await deleteAdminMember(id);
 
-      setMembers((prev) => prev.filter((member) => member.id !== id));
+      if (members.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminMembersPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setMembers(sortByOrder(refreshed.data));
+        setPagination(refreshed.pagination);
+      }
+
       toast.success("Member deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -174,9 +196,7 @@ export function MembersListPage() {
         </button>
       </div>
 
-      {loading && (
-        <p className="text-sm text-muted-foreground mb-4">Processing...</p>
-      )}
+      {loading && <p className="text-sm text-muted-foreground mb-4">Processing...</p>}
 
       <div className="bg-card border border-border rounded-lg p-4 mb-6">
         <div className="relative">
@@ -199,9 +219,7 @@ export function MembersListPage() {
                 <th className="text-left px-6 py-4 text-foreground">Order</th>
                 <th className="text-left px-6 py-4 text-foreground">Photo</th>
                 <th className="text-left px-6 py-4 text-foreground">Name</th>
-                <th className="text-left px-6 py-4 text-foreground">
-                  Designation
-                </th>
+                <th className="text-left px-6 py-4 text-foreground">Designation</th>
                 <th className="text-left px-6 py-4 text-foreground">Role</th>
                 <th className="text-left px-6 py-4 text-foreground">Status</th>
                 <th className="text-left px-6 py-4 text-foreground">Actions</th>
@@ -210,10 +228,7 @@ export function MembersListPage() {
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="text-center py-12 text-muted-foreground"
-                  >
+                  <td colSpan={7} className="text-center py-12 text-muted-foreground">
                     No members found
                   </td>
                 </tr>
@@ -275,9 +290,7 @@ export function MembersListPage() {
                       </td>
 
                       <td className="px-6 py-4">
-                        <p className="text-muted-foreground">
-                          {member.designation}
-                        </p>
+                        <p className="text-muted-foreground">{member.designation}</p>
                       </td>
 
                       <td className="px-6 py-4">
@@ -316,9 +329,7 @@ export function MembersListPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() =>
-                              navigate(`/dashboard/members/${member.id}/edit`)
-                            }
+                            onClick={() => navigate(`/dashboard/members/${member.id}/edit`)}
                             className="p-2 text-primary hover:bg-primary/10 rounded-md transition-colors"
                             title="Edit"
                           >
@@ -349,14 +360,37 @@ export function MembersListPage() {
         {filteredMembers.length > 0 && (
           <div className="px-6 py-4 bg-muted border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredMembers.length} of {members.length} members
-              {" • "}
+              Showing {filteredMembers.length} of {members.length} members on this page
+              {" | "}
               {members.filter((member) => member.isActive).length} active
-              {" • "}
+              {" | "}
               {members.filter((member) => !member.isActive).length} inactive
             </p>
           </div>
         )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,17 @@
-export const API_ORIGIN = "http://localhost:4000";
+const envApiOrigin =
+  (
+    import.meta as ImportMeta & {
+      env?: Record<string, string | undefined>;
+    }
+  ).env?.VITE_API_ORIGIN ?? "";
+
+const normalizedApiOrigin = envApiOrigin.trim();
+
+if (!normalizedApiOrigin) {
+  throw new Error("Missing VITE_API_ORIGIN. Set it in your .env file.");
+}
+
+export const API_ORIGIN = normalizedApiOrigin.replace(/\/+$/, "");
 export const ADMIN_API_BASE = `${API_ORIGIN}/api/admin`;
 
 type Guard<T> = (value: unknown) => value is T;
@@ -113,6 +126,16 @@ export interface ChangePasswordResponse {
   message?: string;
 }
 
+export interface ForgotPasswordResponse {
+  message: string;
+  resetToken?: string;
+  resetUrl?: string | null;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
 export type ActivityType = "enquiry" | "event" | "news" | "gallery" | "program";
 
 export interface DashboardStatsResponse {
@@ -144,6 +167,18 @@ export interface EnquiryResponse {
   message: string;
   createdAt: string;
   isRead: boolean;
+}
+
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationMeta;
 }
 
 const ACTIVITY_TYPES: ReadonlySet<ActivityType> = new Set([
@@ -191,6 +226,26 @@ function isChangePasswordResponse(payload: unknown): payload is ChangePasswordRe
   if (!isRecord(payload)) return false;
   if (payload.message !== undefined && !isString(payload.message)) return false;
   return true;
+}
+
+function isForgotPasswordResponse(
+  payload: unknown,
+): payload is ForgotPasswordResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.message)) return false;
+  if (payload.resetToken !== undefined && !isString(payload.resetToken)) return false;
+  if (
+    payload.resetUrl !== undefined &&
+    payload.resetUrl !== null &&
+    !isString(payload.resetUrl)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isResetPasswordResponse(payload: unknown): payload is ResetPasswordResponse {
+  return isRecord(payload) && isString(payload.message);
 }
 
 function isDashboardStatsResponse(payload: unknown): payload is DashboardStatsResponse {
@@ -268,6 +323,42 @@ export async function loginAdmin(payload: {
     },
     isLoginResponse,
     "Invalid login response format",
+  );
+}
+
+export async function forgotAdminPassword(payload: {
+  email: string;
+}): Promise<ForgotPasswordResponse> {
+  return request(
+    "/auth/forgot-password",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    isForgotPasswordResponse,
+    "Invalid forgot password response format",
+  );
+}
+
+export async function resetAdminPassword(payload: {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<ResetPasswordResponse> {
+  return request(
+    "/auth/reset-password",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    isResetPasswordResponse,
+    "Invalid reset password response format",
   );
 }
 
@@ -361,6 +452,21 @@ export async function getAdminEnquiries(): Promise<EnquiryResponse[]> {
     },
     isEnquiriesResponse,
     "Invalid enquiries response format",
+  );
+}
+
+export async function getAdminEnquiriesPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<EnquiryResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/enquiries?${query}`,
+    {
+      method: "GET",
+    },
+    isPaginatedEnquiryListResponse,
+    "Invalid paginated enquiries response format",
   );
 }
 
@@ -485,10 +591,10 @@ export interface MemberResponse {
   imageUrl: string;
   order: number;
   isActive: boolean;
-  department?: string;
-  email?: string;
-  linkedinUrl?: string;
-  imagePublicId?: string;
+  description?: string | null;
+  email?: string | null;
+  linkedinUrl?: string | null;
+  imagePublicId?: string | null;
 }
 
 export interface MemberUpsertPayload {
@@ -496,7 +602,7 @@ export interface MemberUpsertPayload {
   designation?: string;
   role?: MemberRole;
   isActive?: boolean;
-  department?: string;
+  description?: string;
   email?: string;
   linkedinUrl?: string;
   order?: number;
@@ -815,10 +921,28 @@ function isMemberResponse(payload: unknown): payload is MemberResponse {
   if (!isString(payload.imageUrl)) return false;
   if (!isNumber(payload.order)) return false;
   if (!isBoolean(payload.isActive)) return false;
-  if (payload.department !== undefined && !isString(payload.department)) return false;
-  if (payload.email !== undefined && !isString(payload.email)) return false;
-  if (payload.linkedinUrl !== undefined && !isString(payload.linkedinUrl)) return false;
-  if (payload.imagePublicId !== undefined && !isString(payload.imagePublicId)) {
+  if (
+    payload.description !== undefined &&
+    payload.description !== null &&
+    !isString(payload.description)
+  ) {
+    return false;
+  }
+  if (payload.email !== undefined && payload.email !== null && !isString(payload.email)) {
+    return false;
+  }
+  if (
+    payload.linkedinUrl !== undefined &&
+    payload.linkedinUrl !== null &&
+    !isString(payload.linkedinUrl)
+  ) {
+    return false;
+  }
+  if (
+    payload.imagePublicId !== undefined &&
+    payload.imagePublicId !== null &&
+    !isString(payload.imagePublicId)
+  ) {
     return false;
   }
   return true;
@@ -973,12 +1097,72 @@ function isAwardsResponse(payload: unknown): payload is AwardResponse[] {
   return Array.isArray(payload) && payload.every(isAwardResponse);
 }
 
+function isPaginationMeta(payload: unknown): payload is PaginationMeta {
+  if (!isRecord(payload)) return false;
+  return (
+    isNumber(payload.total) &&
+    isNumber(payload.page) &&
+    isNumber(payload.limit) &&
+    isNumber(payload.totalPages)
+  );
+}
+
+function createPaginatedResponseValidator<T>(
+  itemValidator: Guard<T>,
+): Guard<PaginatedResponse<T>> {
+  return (payload: unknown): payload is PaginatedResponse<T> => {
+    if (!isRecord(payload)) return false;
+    if (!Array.isArray(payload.data) || !payload.data.every(itemValidator)) return false;
+    if (!isPaginationMeta(payload.pagination)) return false;
+    return true;
+  };
+}
+
+function buildPaginationQuery(params: { page: number; limit: number }): string {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  });
+
+  return searchParams.toString();
+}
+
+const isPaginatedNewsListResponse =
+  createPaginatedResponseValidator<NewsItemResponse>(isNewsItemResponse);
+const isPaginatedEventListResponse =
+  createPaginatedResponseValidator<EventItemResponse>(isEventItemResponse);
+const isPaginatedProgramListResponse =
+  createPaginatedResponseValidator<ProgramItemResponse>(isProgramItemResponse);
+const isPaginatedMemberListResponse =
+  createPaginatedResponseValidator<MemberResponse>(isMemberResponse);
+const isPaginatedGalleryAlbumListResponse =
+  createPaginatedResponseValidator<GalleryAlbumResponse>(isGalleryAlbumResponse);
+const isPaginatedPortfolioListResponse =
+  createPaginatedResponseValidator<PortfolioItemResponse>(isPortfolioItemResponse);
+const isPaginatedAwardListResponse =
+  createPaginatedResponseValidator<AwardResponse>(isAwardResponse);
+const isPaginatedEnquiryListResponse =
+  createPaginatedResponseValidator<EnquiryResponse>(isEnquiryResponse);
+
 export async function getAdminNews(): Promise<NewsItemResponse[]> {
   return request(
     "/news",
     { method: "GET" },
     isNewsListResponse,
     "Invalid news response format",
+  );
+}
+
+export async function getAdminNewsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<NewsItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/news?${query}`,
+    { method: "GET" },
+    isPaginatedNewsListResponse,
+    "Invalid paginated news response format",
   );
 }
 
@@ -1015,6 +1199,19 @@ export async function getAdminEvents(): Promise<EventItemResponse[]> {
     { method: "GET" },
     isEventListResponse,
     "Invalid events response format",
+  );
+}
+
+export async function getAdminEventsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<EventItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/events?${query}`,
+    { method: "GET" },
+    isPaginatedEventListResponse,
+    "Invalid paginated events response format",
   );
 }
 
@@ -1060,6 +1257,19 @@ export async function getAdminPrograms(): Promise<ProgramItemResponse[]> {
     { method: "GET" },
     isProgramListResponse,
     "Invalid programs response format",
+  );
+}
+
+export async function getAdminProgramsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<ProgramItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/programs?${query}`,
+    { method: "GET" },
+    isPaginatedProgramListResponse,
+    "Invalid paginated programs response format",
   );
 }
 
@@ -1128,6 +1338,19 @@ export async function getAdminMembers(): Promise<MemberResponse[]> {
   );
 }
 
+export async function getAdminMembersPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<MemberResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/members?${query}`,
+    { method: "GET" },
+    isPaginatedMemberListResponse,
+    "Invalid paginated members response format",
+  );
+}
+
 export async function getAdminMemberById(id: string): Promise<MemberResponse> {
   return request(
     `/members/${id}`,
@@ -1193,6 +1416,19 @@ export async function getAdminGalleryAlbums(): Promise<GalleryAlbumResponse[]> {
     { method: "GET" },
     isGalleryAlbumsResponse,
     "Invalid gallery list response format",
+  );
+}
+
+export async function getAdminGalleryAlbumsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<GalleryAlbumResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/gallery?${query}`,
+    { method: "GET" },
+    isPaginatedGalleryAlbumListResponse,
+    "Invalid paginated gallery list response format",
   );
 }
 
@@ -1281,6 +1517,19 @@ export async function getAdminPortfolio(): Promise<PortfolioItemResponse[]> {
   );
 }
 
+export async function getAdminPortfolioPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<PortfolioItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/portfolio?${query}`,
+    { method: "GET" },
+    isPaginatedPortfolioListResponse,
+    "Invalid paginated portfolio response format",
+  );
+}
+
 export async function createAdminPortfolioItem(formData: FormData): Promise<void> {
   await request(
     "/portfolio",
@@ -1326,6 +1575,19 @@ export async function getAdminAwards(): Promise<AwardResponse[]> {
     { method: "GET" },
     isAwardsResponse,
     "Invalid awards response format",
+  );
+}
+
+export async function getAdminAwardsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<AwardResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/awards?${query}`,
+    { method: "GET" },
+    isPaginatedAwardListResponse,
+    "Invalid paginated awards response format",
   );
 }
 

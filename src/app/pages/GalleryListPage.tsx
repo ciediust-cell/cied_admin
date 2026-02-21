@@ -12,16 +12,18 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminGalleryAlbum,
-  getAdminGalleryAlbums,
+  getAdminGalleryAlbumsPaginated,
   getErrorMessage,
   toggleAdminGalleryAlbumStatus,
   type GalleryAlbumResponse,
   type GalleryCategory,
+  type PaginationMeta,
 } from "../lib/adminApiClient";
 import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 type GalleryAlbum = GalleryAlbumResponse;
+const PAGE_SIZE = 20;
 
 const formatCategory = (category: GalleryCategory) =>
   category
@@ -37,6 +39,13 @@ export default function GalleryListPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   const fetchAlbums = useCallback(async () => {
     if (!accessToken) return;
@@ -44,14 +53,18 @@ export default function GalleryListPage() {
     try {
       setLoading(true);
 
-      const data = await getAdminGalleryAlbums();
-      setAlbums(data);
+      const data = await getAdminGalleryAlbumsPaginated({
+        page,
+        limit: PAGE_SIZE,
+      });
+      setAlbums(data.data);
+      setPagination(data.pagination);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to load galleries"));
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => {
     fetchAlbums();
@@ -68,8 +81,16 @@ export default function GalleryListPage() {
       setDeletingId(id);
 
       await deleteAdminGalleryAlbum(id);
-
-      setAlbums((prev) => prev.filter((album) => album.id !== id));
+      if (albums.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminGalleryAlbumsPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setAlbums(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("Gallery deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -233,6 +254,29 @@ export default function GalleryListPage() {
           })}
         </div>
       )}
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

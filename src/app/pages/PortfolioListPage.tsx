@@ -5,9 +5,10 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   deleteAdminPortfolioItem,
-  getAdminPortfolio,
+  getAdminPortfolioPaginated,
   getErrorMessage,
   toggleAdminPortfolioItemStatus,
+  type PaginationMeta,
   type PortfolioItemResponse,
   type StartupSector,
   type StartupStage,
@@ -16,6 +17,7 @@ import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 type PortfolioItem = PortfolioItemResponse;
+const PAGE_SIZE = 20;
 
 const STAGE_LABELS: Record<StartupStage, string> = {
   IDEATION: "Ideation",
@@ -42,6 +44,13 @@ export function PortfolioListPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   const fetchPortfolio = useCallback(async () => {
     if (!accessToken) return;
@@ -49,14 +58,18 @@ export function PortfolioListPage() {
     try {
       setLoading(true);
 
-      const data = await getAdminPortfolio();
-      setItems(data);
+      const data = await getAdminPortfolioPaginated({
+        page,
+        limit: PAGE_SIZE,
+      });
+      setItems(data.data);
+      setPagination(data.pagination);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to load portfolio"));
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => {
     fetchPortfolio();
@@ -89,8 +102,16 @@ export function PortfolioListPage() {
       setDeletingId(id);
 
       await deleteAdminPortfolioItem(id);
-
-      setItems((prev) => prev.filter((item) => item.id !== id));
+      if (items.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminPortfolioPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setItems(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
       toast.success("Startup deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -278,7 +299,7 @@ export function PortfolioListPage() {
         {filteredItems.length > 0 && (
           <div className="px-6 py-4 bg-muted border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredItems.length} of {items.length} startups
+              Showing {filteredItems.length} of {items.length} startups on this page
               {" | "}
               {items.filter((item) => item.isActive).length} active
               {" | "}
@@ -286,6 +307,29 @@ export function PortfolioListPage() {
             </p>
           </div>
         )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <p className="text-muted-foreground">
+          Page {pagination.page} of {Math.max(1, pagination.totalPages)} ({pagination.total}{" "}
+          total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={loading || page <= 1}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading || page >= Math.max(1, pagination.totalPages)}
+            className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
