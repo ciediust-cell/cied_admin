@@ -3,6 +3,7 @@ import {
   Search,
   Filter,
   Eye,
+  Trash2,
   X,
   Mail,
   Phone,
@@ -12,12 +13,14 @@ import {
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
+  deleteAdminEnquiry,
   getAdminEnquiriesPaginated,
   getErrorMessage,
   markEnquiryAsRead,
   type EnquiryResponse,
   type PaginationMeta,
 } from "../lib/adminApiClient";
+import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 const PAGE_SIZE = 20;
@@ -33,6 +36,7 @@ export function EnquiriesListPage() {
     useState<EnquiryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [markingReadIds, setMarkingReadIds] = useState<string[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta>({
     total: 0,
@@ -97,6 +101,40 @@ export function EnquiriesListPage() {
 
   const handleCloseDetails = () => {
     setSelectedEnquiry(null);
+  };
+
+  const handleDeleteEnquiry = async (enquiry: EnquiryResponse) => {
+    const confirmed = await confirmToast({
+      message: "Are you sure you want to delete this enquiry?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(enquiry.id);
+      await deleteAdminEnquiry(enquiry.id);
+
+      if (selectedEnquiry?.id === enquiry.id) {
+        setSelectedEnquiry(null);
+      }
+
+      if (enquiries.length === 1 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      } else {
+        const refreshed = await getAdminEnquiriesPaginated({
+          page,
+          limit: PAGE_SIZE,
+        });
+        setEnquiries(refreshed.data);
+        setPagination(refreshed.pagination);
+      }
+
+      toast.success("Enquiry deleted");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to delete enquiry"));
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const filteredEnquiries = enquiries.filter((enquiry) => {
@@ -248,6 +286,18 @@ export function EnquiriesListPage() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => handleDeleteEnquiry(enquiry)}
+                          disabled={deletingId === enquiry.id}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          title="Delete enquiry"
+                        >
+                          {deletingId === enquiry.id ? (
+                            <LoadingIndicator label="Deleting..." className="text-xs" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -393,6 +443,20 @@ export function EnquiriesListPage() {
                 Close
               </button>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteEnquiry(selectedEnquiry)}
+                  disabled={deletingId === selectedEnquiry.id}
+                  className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {deletingId === selectedEnquiry.id ? (
+                    <LoadingIndicator label="Deleting..." />
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </>
+                  )}
+                </button>
                 {!selectedEnquiry.isRead && (
                   <button
                     onClick={() => handleMarkAsRead(selectedEnquiry.id)}

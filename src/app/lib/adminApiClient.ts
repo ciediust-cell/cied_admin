@@ -481,6 +481,17 @@ export async function markEnquiryAsRead(id: string): Promise<void> {
   );
 }
 
+export async function deleteAdminEnquiry(id: string): Promise<void> {
+  await request(
+    `/enquiries/${id}`,
+    {
+      method: "DELETE",
+    },
+    null,
+    "Invalid enquiry delete response format",
+  );
+}
+
 export type MemberRole = "GOVERNANCE" | "MANAGEMENT" | "MENTOR" | "ADVISOR";
 
 export type GalleryCategory =
