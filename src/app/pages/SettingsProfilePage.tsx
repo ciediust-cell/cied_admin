@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Shield, User, Mail, Phone, KeyRound } from "lucide-react";
+import { LogOut, Shield, User, Mail, KeyRound } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import toast from "react-hot-toast";
 import { useAdminLogout } from "../hooks/useAdminLogout";
@@ -16,7 +16,6 @@ import { LoadingIndicator } from "../components/ui/loading-indicator";
 interface AdminProfile {
   name: string;
   email: string;
-  phone: string;
   role: string;
   lastLogin: string;
 }
@@ -28,7 +27,6 @@ export function SettingsProfilePage() {
   const [profile, setProfile] = useState<AdminProfile>({
     name: "Admin User",
     email: "admin@cied.edu",
-    phone: "+1 (555) 010-2000",
     role: "System Administrator",
     lastLogin: "Feb 10, 2026 - 9:42 AM",
   });
@@ -203,14 +201,14 @@ export function SettingsProfilePage() {
               <label className="text-sm text-muted-foreground">Full name</label>
               <div className="relative mt-2">
                 <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => handleProfileChange("name", e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
+                  <input
+                    type="text"
+                    value={profile.name}
+                    readOnly
+                    className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
               </div>
-            </div>
             <div>
               <label className="text-sm text-muted-foreground">Email</label>
               <div className="relative mt-2">
@@ -219,18 +217,6 @@ export function SettingsProfilePage() {
                   type="email"
                   value={profile.email}
                   onChange={(e) => handleProfileChange("email", e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Phone</label>
-              <div className="relative mt-2">
-                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="tel"
-                  value={profile.phone}
-                  onChange={(e) => handleProfileChange("phone", e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
