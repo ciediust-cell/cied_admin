@@ -700,6 +700,8 @@ export interface AwardResponse {
   year: number;
   description: string;
   awardedBy: string;
+  featuredImage?: string | null;
+  featuredImageId?: string | null;
   order: number;
   isActive: boolean;
 }
@@ -1093,6 +1095,20 @@ function isPortfolioListResponse(payload: unknown): payload is PortfolioItemResp
 
 function isAwardResponse(payload: unknown): payload is AwardResponse {
   if (!isRecord(payload)) return false;
+  if (
+    payload.featuredImage !== undefined &&
+    payload.featuredImage !== null &&
+    !isString(payload.featuredImage)
+  ) {
+    return false;
+  }
+  if (
+    payload.featuredImageId !== undefined &&
+    payload.featuredImageId !== null &&
+    !isString(payload.featuredImageId)
+  ) {
+    return false;
+  }
   return (
     isString(payload.id) &&
     isString(payload.title) &&
@@ -1611,13 +1627,12 @@ export async function getAdminAwardById(id: string): Promise<AwardResponse> {
   );
 }
 
-export async function createAdminAward(payload: AwardUpsertPayload): Promise<void> {
+export async function createAdminAward(formData: FormData): Promise<void> {
   await request(
     "/awards",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: formData,
     },
     null,
     "Invalid award create response format",
@@ -1634,6 +1649,21 @@ export async function updateAdminAward(
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    },
+    null,
+    "Invalid award update response format",
+  );
+}
+
+export async function updateAdminAwardWithImage(
+  id: string,
+  formData: FormData,
+): Promise<void> {
+  await request(
+    `/awards/${id}`,
+    {
+      method: "PATCH",
+      body: formData,
     },
     null,
     "Invalid award update response format",

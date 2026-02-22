@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Save, ArrowLeft, Award } from "lucide-react";
+import { Save, ArrowLeft, Award, Image as ImageIcon, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import {
   createAdminAward,
   getAdminAwardById,
   getErrorMessage,
-  updateAdminAward,
-  type AwardUpsertPayload,
+  updateAdminAwardWithImage,
 } from "../lib/adminApiClient";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
@@ -28,6 +27,9 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
   const [awardedBy, setAwardedBy] = useState("");
   const [order, setOrder] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode !== "edit" || !awardId || !accessToken) return;
@@ -43,6 +45,8 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
         setAwardedBy(data.awardedBy || "");
         setOrder(data.order?.toString() || "");
         setIsActive(Boolean(data.isActive));
+        setCurrentImageUrl(data.featuredImage || null);
+        setPreviewImage(data.featuredImage || null);
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Failed to load award"));
       } finally {
@@ -52,6 +56,24 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
 
     fetchAward();
   }, [mode, awardId, accessToken]);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setPreviewImage(currentImageUrl || null);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,18 +89,26 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
       return;
     }
 
-    const payload: AwardUpsertPayload = {
-      title: title.trim(),
-      awardedBy: awardedBy.trim(),
-      year: parsedYear,
-      description: description.trim(),
-      isActive,
-    };
+    if (mode === "create" && !imageFile) {
+      toast.error("Award image is required.");
+      return;
+    }
 
-    if (!payload.title || !payload.awardedBy || !payload.description) {
+    const trimmedTitle = title.trim();
+    const trimmedAwardedBy = awardedBy.trim();
+    const trimmedDescription = description.trim();
+
+    if (!trimmedTitle || !trimmedAwardedBy || !trimmedDescription) {
       toast.error("Please fill all required fields.");
       return;
     }
+
+    const formData = new FormData();
+    formData.append("title", trimmedTitle);
+    formData.append("awardedBy", trimmedAwardedBy);
+    formData.append("year", String(parsedYear));
+    formData.append("description", trimmedDescription);
+    formData.append("isActive", String(isActive));
 
     if (order.trim()) {
       const parsedOrder = Number(order);
@@ -86,16 +116,20 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
         toast.error("Order must be a valid number.");
         return;
       }
-      payload.order = parsedOrder;
+      formData.append("order", String(parsedOrder));
+    }
+
+    if (imageFile) {
+      formData.append("image", imageFile);
     }
 
     try {
       setLoading(true);
 
       if (mode === "create") {
-        await createAdminAward(payload);
+        await createAdminAward(formData);
       } else if (awardId) {
-        await updateAdminAward(awardId, payload);
+        await updateAdminAwardWithImage(awardId, formData);
       }
 
       toast.success(
@@ -258,8 +292,70 @@ export default function AwardFormPage({ mode }: AwardFormPageProps) {
             </div>
 
             <div className="bg-card border border-border rounded-lg p-6">
+              <h3 className="text-foreground mb-4">Award Image</h3>
+
+              {previewImage ? (
+                <div className="space-y-3">
+                  <div className="relative rounded-lg overflow-hidden border border-border">
+                    <img
+                      src={previewImage}
+                      alt="Award preview"
+                      className="w-full h-48 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+                      title="Remove selected image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="w-full text-sm text-destructive hover:underline"
+                  >
+                    Remove Selected Image
+                  </button>
+                </div>
+              ) : (
+                <label className="block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-accent transition-colors">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm text-foreground">Upload Image</p>
+                      <p className="text-xs text-muted-foreground">
+                        Click to browse
+                      </p>
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              <p className="text-xs text-muted-foreground mt-3">
+                Recommended: 1200x630px (JPG, PNG, WEBP)
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-6">
               <h3 className="text-foreground mb-4">Preview</h3>
               <div className="bg-muted/30 border border-border rounded-lg p-4">
+                {previewImage ? (
+                  <img
+                    src={previewImage}
+                    alt="Award"
+                    className="w-full h-40 object-cover rounded-lg mb-3"
+                  />
+                ) : null}
                 <div className="flex items-start gap-3 mb-3">
                   <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Award className="w-5 h-5 text-primary" />
