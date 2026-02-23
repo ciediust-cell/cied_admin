@@ -5,6 +5,7 @@ export interface News {
   excerpt: string;
   content: string;
   featuredImage: string;
+  newsDate: string;
   isPublished: boolean;
   publishedAt?: string;
   createdAt: string;

@@ -14,6 +14,11 @@ import { confirmToast } from "../lib/confirmToast";
 import { LoadingIndicator } from "../components/ui/loading-indicator";
 
 const PAGE_SIZE = 20;
+const formatNewsDate = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Invalid date";
+  return parsed.toLocaleString();
+};
 
 export function NewsListPage() {
   const [newsItems, setNewsItems] = useState<NewsItemResponse[]>([]);
@@ -157,7 +162,7 @@ export function NewsListPage() {
             <tr>
               <th className="px-6 py-4 text-left">Title</th>
               <th className="px-6 py-4 text-left">Status</th>
-              <th className="px-6 py-4 text-left">Created</th>
+              <th className="px-6 py-4 text-left">News Date</th>
               <th className="px-6 py-4 text-left">Actions</th>
             </tr>
           </thead>
@@ -184,7 +189,7 @@ export function NewsListPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-muted-foreground">
-                    {new Date(item.createdAt).toLocaleDateString()}
+                    {formatNewsDate(item.newsDate)}
                   </td>
                   <td className="px-6 py-4 flex gap-2">
                     <button

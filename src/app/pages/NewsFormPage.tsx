@@ -21,6 +21,8 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
   const [loading, setLoading] = useState(false);
 
   const [title, setTitle] = useState("");
+  const [newsDate, setNewsDate] = useState("");
+  const [newsTime, setNewsTime] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
   const [isPublished, setIsPublished] = useState(false);
@@ -36,6 +38,11 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
 
         if (existing) {
           setTitle(existing.title);
+          if (existing.newsDate) {
+            const dateObj = new Date(existing.newsDate);
+            setNewsDate(dateObj.toISOString().split("T")[0]);
+            setNewsTime(dateObj.toISOString().split("T")[1]?.slice(0, 5) || "");
+          }
           setExcerpt(existing.excerpt || "");
           setContent(existing.content || "");
           setIsPublished(existing.isPublished);
@@ -56,6 +63,11 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
 
       const formData = new FormData();
       formData.append("title", title);
+      if (!newsDate || !newsTime) {
+        toast.error("Please select both news date and time.");
+        return;
+      }
+      formData.append("newsDate", new Date(`${newsDate}T${newsTime}`).toISOString());
       formData.append("excerpt", excerpt);
       formData.append("content", content);
       formData.append("isPublished", String(isPublished));
@@ -94,6 +106,29 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
           required
           className="w-full p-3 border rounded"
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="space-y-1">
+            <span className="text-sm text-gray-600">News Date</span>
+            <input
+              type="date"
+              value={newsDate}
+              onChange={(e) => setNewsDate(e.target.value)}
+              required
+              className="w-full p-3 border rounded"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-sm text-gray-600">News Time</span>
+            <input
+              type="time"
+              value={newsTime}
+              onChange={(e) => setNewsTime(e.target.value)}
+              required
+              className="w-full p-3 border rounded"
+            />
+          </label>
+        </div>
 
         <textarea
           value={excerpt}

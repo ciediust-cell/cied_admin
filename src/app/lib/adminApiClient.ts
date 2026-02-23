@@ -517,6 +517,7 @@ export interface NewsItemResponse {
   id: string;
   title: string;
   isPublished: boolean;
+  newsDate: string;
   createdAt: string;
   excerpt?: string;
   content?: string;
@@ -752,6 +753,7 @@ function isNewsItemResponse(payload: unknown): payload is NewsItemResponse {
   if (!isString(payload.id)) return false;
   if (!isString(payload.title)) return false;
   if (!isBoolean(payload.isPublished)) return false;
+  if (!isString(payload.newsDate)) return false;
   if (!isString(payload.createdAt)) return false;
   if (payload.excerpt !== undefined && !isString(payload.excerpt)) return false;
   if (payload.content !== undefined && !isString(payload.content)) return false;
