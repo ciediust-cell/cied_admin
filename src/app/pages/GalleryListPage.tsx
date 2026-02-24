@@ -194,7 +194,7 @@ export default function GalleryListPage() {
                         </div>
                       </div>
                       <span className="inline-flex px-2.5 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
-                        {album.images.length} photos
+                        {album.imageCount} photos
                       </span>
                     </div>
 

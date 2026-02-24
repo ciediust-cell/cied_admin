@@ -100,10 +100,19 @@ export default function GalleryDetailPage() {
 
     try {
       setDeletingImageId(imageId);
-      await deleteAdminGalleryImage(imageId);
+      const result = await deleteAdminGalleryImage(imageId);
 
       setSelectedImage((prev) => (prev?.id === imageId ? null : prev));
-      await fetchGallery();
+      if (result.deletedImageId) {
+        setGallery((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            coverImageId: result.coverImageId,
+            images: prev.images.filter((image) => image.id !== result.deletedImageId),
+          };
+        });
+      }
       toast.success("Image deleted");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Delete failed"));
@@ -119,9 +128,15 @@ export default function GalleryDetailPage() {
     try {
       setIsUploading(true);
 
-      await uploadAdminGalleryImages(gallery.id, Array.from(files));
-
-      await fetchGallery();
+      const result = await uploadAdminGalleryImages(gallery.id, Array.from(files));
+      setGallery((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          coverImageId: result.coverImageId,
+          images: [...result.images, ...prev.images],
+        };
+      });
       toast.success("Images uploaded");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Upload failed"));

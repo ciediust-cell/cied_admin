@@ -644,6 +644,7 @@ export interface GalleryAlbumResponse {
   isActive: boolean;
   coverImage: GalleryImageResponse | null;
   images: GalleryImageResponse[];
+  imageCount: number;
   updatedAt: string;
 }
 
@@ -672,6 +673,17 @@ export interface GalleryCoverResponse {
   gallery: {
     coverImageId: string | null;
   };
+}
+
+export interface GalleryUploadImagesResponse {
+  images: GalleryImageResponse[];
+  coverImageId: string | null;
+}
+
+export interface GalleryDeleteImageResponse {
+  deletedImageId: string | null;
+  galleryId: string | null;
+  coverImageId: string | null;
 }
 
 export interface PortfolioFounderResponse {
@@ -1015,6 +1027,7 @@ function isGalleryAlbumResponse(payload: unknown): payload is GalleryAlbumRespon
     return false;
   }
   if (!isBoolean(payload.isActive)) return false;
+  if (!isNumber(payload.imageCount)) return false;
   if (!isString(payload.updatedAt)) return false;
   if (payload.coverImage !== null && !isGalleryImageResponse(payload.coverImage)) {
     return false;
@@ -1064,6 +1077,28 @@ function isGalleryCoverResponse(payload: unknown): payload is GalleryCoverRespon
     isRecord(payload) &&
     isRecord(payload.gallery) &&
     (payload.gallery.coverImageId === null || isString(payload.gallery.coverImageId))
+  );
+}
+
+function isGalleryUploadImagesResponse(
+  payload: unknown,
+): payload is GalleryUploadImagesResponse {
+  return (
+    isRecord(payload) &&
+    Array.isArray(payload.images) &&
+    payload.images.every(isGalleryImageResponse) &&
+    (payload.coverImageId === null || isString(payload.coverImageId))
+  );
+}
+
+function isGalleryDeleteImageResponse(
+  payload: unknown,
+): payload is GalleryDeleteImageResponse {
+  return (
+    isRecord(payload) &&
+    (payload.deletedImageId === null || isString(payload.deletedImageId)) &&
+    (payload.galleryId === null || isString(payload.galleryId)) &&
+    (payload.coverImageId === null || isString(payload.coverImageId))
   );
 }
 
@@ -1531,11 +1566,13 @@ export async function setAdminGalleryCoverImage(
   );
 }
 
-export async function deleteAdminGalleryImage(imageId: string): Promise<void> {
-  await request(
+export async function deleteAdminGalleryImage(
+  imageId: string,
+): Promise<GalleryDeleteImageResponse> {
+  return request(
     `/gallery/image/${imageId}`,
     { method: "DELETE" },
-    null,
+    isGalleryDeleteImageResponse,
     "Invalid gallery image delete response format",
   );
 }
@@ -1543,14 +1580,14 @@ export async function deleteAdminGalleryImage(imageId: string): Promise<void> {
 export async function uploadAdminGalleryImages(
   albumId: string,
   files: File[],
-): Promise<void> {
+): Promise<GalleryUploadImagesResponse> {
   const formData = new FormData();
   files.forEach((file) => formData.append("images", file));
 
-  await request(
+  return request(
     `/gallery/${albumId}/images`,
     { method: "POST", body: formData },
-    null,
+    isGalleryUploadImagesResponse,
     "Invalid gallery upload response format",
   );
 }
