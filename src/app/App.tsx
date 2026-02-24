@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./pages/AdminLayout";
 import Dashboard from "./pages/Dashboard";
@@ -23,8 +24,47 @@ import AwardsFormPage from "./pages/AwardsFormPage";
 import { SettingsProfilePage } from "./pages/SettingsProfilePage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import { Toaster } from "react-hot-toast";
+import { refreshAdminSession } from "./lib/adminApiClient";
+import { useAuthStore } from "../store/authStore";
 
 export default function App() {
+  const isAuthReady = useAuthStore((state) => state.isAuthReady);
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
+  const logout = useAuthStore((state) => state.logout);
+  const setAuthReady = useAuthStore((state) => state.setAuthReady);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const bootstrapAuth = async () => {
+      try {
+        const payload = await refreshAdminSession();
+        if (!mounted) return;
+        setAccessToken(payload.accessToken);
+      } catch {
+        if (!mounted) return;
+        logout();
+      } finally {
+        if (!mounted) return;
+        setAuthReady(true);
+      }
+    };
+
+    void bootstrapAuth();
+
+    return () => {
+      mounted = false;
+    };
+  }, [logout, setAccessToken, setAuthReady]);
+
+  if (!isAuthReady) {
+    return (
+      <div className="size-full flex items-center justify-center bg-muted text-muted-foreground">
+        Checking session...
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Toaster

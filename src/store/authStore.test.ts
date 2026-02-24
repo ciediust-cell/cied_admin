@@ -1,32 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-interface MockStorage {
-  clear: () => void;
-  getItem: (key: string) => string | null;
-  removeItem: (key: string) => void;
-  setItem: (key: string, value: string) => void;
-}
-
-function installMockLocalStorage(initial: Record<string, string> = {}) {
-  const store = new Map<string, string>(Object.entries(initial));
-
-  const mockStorage: MockStorage = {
-    clear: () => store.clear(),
-    getItem: (key) => store.get(key) ?? null,
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-  };
-
-  Object.defineProperty(globalThis, "localStorage", {
-    value: mockStorage,
-    configurable: true,
-  });
-}
-
 async function loadAuthStore() {
   const module = await import("./authStore");
   return module.useAuthStore;
@@ -35,45 +8,50 @@ async function loadAuthStore() {
 describe("authStore", () => {
   beforeEach(() => {
     vi.resetModules();
-    installMockLocalStorage();
   });
 
-  it("hydrates access token from localStorage", async () => {
-    installMockLocalStorage({ accessToken: "seed-token" });
-    vi.resetModules();
-
+  it("initializes with no access token and auth not ready", async () => {
     const useAuthStore = await loadAuthStore();
 
-    expect(useAuthStore.getState().accessToken).toBe("seed-token");
+    expect(useAuthStore.getState().accessToken).toBeNull();
+    expect(useAuthStore.getState().isAuthReady).toBe(false);
   });
 
-  it("login persists access token in state and localStorage", async () => {
+  it("login stores token in memory and marks auth ready", async () => {
     const useAuthStore = await loadAuthStore();
 
     useAuthStore.getState().login("next-token");
 
     expect(useAuthStore.getState().accessToken).toBe("next-token");
-    expect(globalThis.localStorage.getItem("accessToken")).toBe("next-token");
+    expect(useAuthStore.getState().isAuthReady).toBe(true);
   });
 
-  it("setAccessToken updates existing token", async () => {
+  it("setAccessToken updates token and marks auth ready", async () => {
     const useAuthStore = await loadAuthStore();
 
     useAuthStore.getState().setAccessToken("refreshed-token");
 
     expect(useAuthStore.getState().accessToken).toBe("refreshed-token");
-    expect(globalThis.localStorage.getItem("accessToken")).toBe(
-      "refreshed-token",
-    );
+    expect(useAuthStore.getState().isAuthReady).toBe(true);
   });
 
-  it("logout clears access token from state and localStorage", async () => {
+  it("setAuthReady updates readiness flag", async () => {
     const useAuthStore = await loadAuthStore();
-    useAuthStore.getState().login("active-token");
+
+    useAuthStore.getState().setAuthReady(true);
+    expect(useAuthStore.getState().isAuthReady).toBe(true);
+
+    useAuthStore.getState().setAuthReady(false);
+    expect(useAuthStore.getState().isAuthReady).toBe(false);
+  });
+
+  it("logout clears token and keeps auth marked ready", async () => {
+    const useAuthStore = await loadAuthStore();
+    useAuthStore.getState().setAccessToken("active-token");
 
     useAuthStore.getState().logout();
 
     expect(useAuthStore.getState().accessToken).toBeNull();
-    expect(globalThis.localStorage.getItem("accessToken")).toBeNull();
+    expect(useAuthStore.getState().isAuthReady).toBe(true);
   });
 });

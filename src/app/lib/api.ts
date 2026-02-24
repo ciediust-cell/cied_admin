@@ -1,3 +1,5 @@
+import { useAuthStore } from "../../store/authStore";
+
 const envApiOrigin =
   (
     import.meta as ImportMeta & {
@@ -18,7 +20,7 @@ export async function api<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = localStorage.getItem("accessToken");
+  const token = useAuthStore.getState().accessToken;
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {

@@ -2,26 +2,30 @@ import { create } from "zustand";
 
 interface AuthState {
   accessToken: string | null;
+  isAuthReady: boolean;
   login: (accessToken: string) => void;
   setAccessToken: (accessToken: string) => void;
+  setAuthReady: (isReady?: boolean) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: localStorage.getItem("accessToken"),
+  accessToken: null,
+  isAuthReady: false,
 
   login: (accessToken) => {
-    localStorage.setItem("accessToken", accessToken);
-    set({ accessToken });
+    set({ accessToken, isAuthReady: true });
   },
 
   setAccessToken: (accessToken) => {
-    localStorage.setItem("accessToken", accessToken);
-    set({ accessToken });
+    set({ accessToken, isAuthReady: true });
+  },
+
+  setAuthReady: (isReady = true) => {
+    set({ isAuthReady: isReady });
   },
 
   logout: () => {
-    localStorage.removeItem("accessToken");
-    set({ accessToken: null });
+    set({ accessToken: null, isAuthReady: true });
   },
 }));
