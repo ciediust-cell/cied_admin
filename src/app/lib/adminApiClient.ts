@@ -497,6 +497,7 @@ export type MemberRole = "GOVERNANCE" | "MANAGEMENT" | "MENTOR" | "ADVISOR";
 export type GalleryCategory =
   | "INFRASTRUCTURE"
   | "EVENTS"
+  | "NEWS"
   | "WORKSPACE"
   | "FACILITIES"
   | "ACTIVITIES"
@@ -521,6 +522,8 @@ export interface NewsItemResponse {
   createdAt: string;
   excerpt?: string;
   content?: string;
+  featuredImage?: string | null;
+  featuredImageId?: string | null;
 }
 
 export interface EventItemResponse {
@@ -726,6 +729,7 @@ const MEMBER_ROLES: ReadonlySet<MemberRole> = new Set([
 const GALLERY_CATEGORIES: ReadonlySet<GalleryCategory> = new Set([
   "INFRASTRUCTURE",
   "EVENTS",
+  "NEWS",
   "WORKSPACE",
   "FACILITIES",
   "ACTIVITIES",
@@ -757,6 +761,20 @@ function isNewsItemResponse(payload: unknown): payload is NewsItemResponse {
   if (!isString(payload.createdAt)) return false;
   if (payload.excerpt !== undefined && !isString(payload.excerpt)) return false;
   if (payload.content !== undefined && !isString(payload.content)) return false;
+  if (
+    payload.featuredImage !== undefined &&
+    payload.featuredImage !== null &&
+    !isString(payload.featuredImage)
+  ) {
+    return false;
+  }
+  if (
+    payload.featuredImageId !== undefined &&
+    payload.featuredImageId !== null &&
+    !isString(payload.featuredImageId)
+  ) {
+    return false;
+  }
   return true;
 }
 

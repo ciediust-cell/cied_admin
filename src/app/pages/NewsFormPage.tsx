@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import toast from "react-hot-toast";
@@ -26,7 +26,19 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
   const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
   const [isPublished, setIsPublished] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [mainImageIndex, setMainImageIndex] = useState(0);
+
+  const previews = useMemo(
+    () => files.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })),
+    [files],
+  );
+
+  useEffect(() => {
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [previews]);
 
   useEffect(() => {
     if (mode !== "edit" || !newsId || !accessToken) return;
@@ -55,6 +67,22 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
     fetchNews();
   }, [mode, newsId, accessToken]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+
+    setFiles((prev) => [...prev, ...Array.from(selectedFiles)]);
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+    setMainImageIndex((prev) => {
+      if (prev === index) return 0;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -72,7 +100,15 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
       formData.append("content", content);
       formData.append("isPublished", String(isPublished));
 
-      if (file) formData.append("image", file);
+      if (mode === "create" && files.length === 0) {
+        toast.error("Please upload at least one image.");
+        return;
+      }
+
+      files.forEach((file) => formData.append("images", file));
+      if (files.length > 0) {
+        formData.append("mainImageIndex", String(mainImageIndex));
+      }
 
       if (mode === "create") {
         await createAdminNews(formData);
@@ -155,22 +191,56 @@ export default function NewsFormPage({ mode }: NewsFormPageProps) {
           Publish
         </label>
 
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="
-    block w-full text-sm text-gray-700
-    file:mr-4 file:py-2 file:px-4
-    file:rounded-md file:border
-    file:border-blue-500
-    file:bg-white
-    file:text-blue-600
-    file:font-medium
-    file:hover:bg-blue-50
-    file:cursor-pointer
-    cursor-pointer
-  "
-        />
+        <div className="space-y-3">
+          <input
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="
+      block w-full text-sm text-gray-700
+      file:mr-4 file:py-2 file:px-4
+      file:rounded-md file:border
+      file:border-blue-500
+      file:bg-white
+      file:text-blue-600
+      file:font-medium
+      file:hover:bg-blue-50
+      file:cursor-pointer
+      cursor-pointer
+    "
+          />
+
+          {previews.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {previews.map((preview, index) => (
+                <div key={`${preview.name}-${index}`} className="border rounded p-2 space-y-2">
+                  <img
+                    src={preview.url}
+                    alt={preview.name}
+                    className="w-full h-24 object-cover rounded"
+                  />
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="radio"
+                      name="mainImage"
+                      checked={mainImageIndex === index}
+                      onChange={() => setMainImageIndex(index)}
+                    />
+                    Main image
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(index)}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button
           type="submit"
