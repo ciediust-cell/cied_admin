@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Newspaper,
   Calendar,
+  CalendarDays,
   GraduationCap,
   Briefcase,
   Image,
@@ -9,6 +10,9 @@ import {
   Settings,
   Users,
   Award,
+  Handshake,
+  FileText,
+  Building2,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
@@ -39,6 +43,18 @@ const navItems: NavItem[] = [
     to: "/dashboard/events",
   },
   {
+    icon: <CalendarDays className="w-5 h-5" />,
+    label: "Workshops",
+    id: "workshops",
+    to: "/dashboard/workshops",
+  },
+  {
+    icon: <Building2 className="w-5 h-5" />,
+    label: "Facilities",
+    id: "facilities",
+    to: "/dashboard/facilities",
+  },
+  {
     icon: <GraduationCap className="w-5 h-5" />,
     label: "Programs",
     id: "programs",
@@ -67,6 +83,18 @@ const navItems: NavItem[] = [
     label: "Awards",
     id: "awards",
     to: "/dashboard/awards",
+  },
+  {
+    icon: <Handshake className="w-5 h-5" />,
+    label: "Collaborators",
+    id: "collaborators",
+    to: "/dashboard/collaborators",
+  },
+  {
+    icon: <FileText className="w-5 h-5" />,
+    label: "Board Message",
+    id: "board-message",
+    to: "/dashboard/board-message",
   },
   {
     icon: <MessageSquare className="w-5 h-5" />,

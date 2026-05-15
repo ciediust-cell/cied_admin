@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   X,
@@ -9,6 +9,8 @@ import {
   Clock,
   MapPin,
   Link as LinkIcon,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
@@ -24,6 +26,19 @@ interface EventFormPageProps {
   mode: "create" | "edit";
 }
 
+interface EventImageDraft {
+  id: string;
+  imageUrl: string;
+  caption: string;
+}
+
+interface NewEventImageDraft {
+  id: string;
+  file: File;
+  previewUrl: string;
+  caption: string;
+}
+
 export default function EventsFormPage({ mode }: EventFormPageProps) {
   const navigate = useNavigate();
   const { eventId } = useParams();
@@ -37,9 +52,13 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
   const [eventTime, setEventTime] = useState("");
   const [location, setLocation] = useState("");
   const [registrationUrl, setRegistrationUrl] = useState("");
-  const [isPublished, setIsPublished] = useState(false);
+  const [isPublished, setIsPublished] = useState(mode === "create");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [galleryImages, setGalleryImages] = useState<EventImageDraft[]>([]);
+  const [newGalleryImages, setNewGalleryImages] = useState<NewEventImageDraft[]>([]);
+  const [deletedGalleryImageIds, setDeletedGalleryImageIds] = useState<string[]>([]);
+  const newGalleryImagesRef = useRef<NewEventImageDraft[]>([]);
 
   // ✅ Fetch event for edit mode
   useEffect(() => {
@@ -56,6 +75,19 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
         setLocation(existing.location || "");
         setIsPublished(existing.isPublished);
         setUploadedImage(existing.featuredImage || null);
+        setGalleryImages(
+          Array.isArray(existing.images)
+            ? existing.images
+                .map((image) => ({
+                  id: image.id,
+                  imageUrl: image.imageUrl,
+                  caption: image.caption || "",
+                }))
+                .sort((a, b) => (existing.images?.find((item) => item.id === a.id)?.order || 0) - (existing.images?.find((item) => item.id === b.id)?.order || 0))
+            : [],
+        );
+        setNewGalleryImages([]);
+        setDeletedGalleryImageIds([]);
 
         if (existing.eventDate) {
           const dateObj = new Date(existing.eventDate);
@@ -74,6 +106,18 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
     fetchEvent();
   }, [mode, eventId, accessToken]);
 
+  useEffect(() => {
+    newGalleryImagesRef.current = newGalleryImages;
+  }, [newGalleryImages]);
+
+  useEffect(() => {
+    return () => {
+      newGalleryImagesRef.current.forEach((image) =>
+        URL.revokeObjectURL(image.previewUrl),
+      );
+    };
+  }, []);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -89,6 +133,50 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
   const handleRemoveImage = () => {
     setImageFile(null);
     setUploadedImage(null);
+  };
+
+  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setNewGalleryImages((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        caption: "",
+      })),
+    ]);
+
+    e.target.value = "";
+  };
+
+  const updateGalleryCaption = (id: string, caption: string) => {
+    setGalleryImages((prev) =>
+      prev.map((image) => (image.id === id ? { ...image, caption } : image)),
+    );
+  };
+
+  const updateNewGalleryCaption = (id: string, caption: string) => {
+    setNewGalleryImages((prev) =>
+      prev.map((image) => (image.id === id ? { ...image, caption } : image)),
+    );
+  };
+
+  const removeGalleryImage = (id: string) => {
+    setGalleryImages((prev) => prev.filter((image) => image.id !== id));
+    setDeletedGalleryImageIds((prev) =>
+      prev.includes(id) ? prev : [...prev, id],
+    );
+  };
+
+  const removeNewGalleryImage = (id: string) => {
+    setNewGalleryImages((prev) => {
+      const target = prev.find((image) => image.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((image) => image.id !== id);
+    });
   };
 
   // ✅ Save (Create / Update)
@@ -126,6 +214,27 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
       if (registrationUrl.trim())
         formData.append("registrationUrl", registrationUrl.trim());
       if (imageFile) formData.append("image", imageFile);
+
+      galleryImages.forEach((image) => {
+        formData.append("retainedImageIds[]", image.id);
+        formData.append("existingImageCaptions[]", image.caption.trim());
+      });
+
+      deletedGalleryImageIds.forEach((id) => {
+        formData.append("deletedImageIds[]", id);
+      });
+
+      newGalleryImages.forEach((image, index) => {
+        formData.append(
+          "images[]",
+          JSON.stringify({
+            caption: image.caption.trim(),
+            imageFileIndex: index,
+            order: index,
+          }),
+        );
+        formData.append("eventImages", image.file);
+      });
 
       if (mode === "create") {
         await createAdminEvent(formData);
@@ -411,6 +520,100 @@ export default function EventsFormPage({ mode }: EventFormPageProps) {
               <p className="text-xs text-muted-foreground mt-3">
                 Recommended: 1200x630px (JPG, PNG)
               </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-foreground">Event Gallery</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload and manage additional event photos
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-primary hover:text-primary/80 text-sm transition-colors cursor-pointer">
+                  <Plus className="w-4 h-4" />
+                  Add Images
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleGalleryUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {galleryImages.length === 0 && newGalleryImages.length === 0 ? (
+                <div className="border border-dashed border-border rounded-lg p-6 text-center">
+                  <ImageIcon className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No gallery images added yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {galleryImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className="border border-border rounded-lg p-3 flex gap-3"
+                    >
+                      <img
+                        src={image.imageUrl}
+                        alt="Gallery"
+                        className="w-24 h-20 object-cover rounded-md flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <input
+                          value={image.caption}
+                          onChange={(e) => updateGalleryCaption(image.id, e.target.value)}
+                          className="w-full px-3 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          placeholder="Caption"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(image.id)}
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded-md h-fit"
+                        title="Remove gallery image"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {newGalleryImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className="border border-border rounded-lg p-3 flex gap-3"
+                    >
+                      <img
+                        src={image.previewUrl}
+                        alt="New gallery preview"
+                        className="w-24 h-20 object-cover rounded-md flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <input
+                          value={image.caption}
+                          onChange={(e) => updateNewGalleryCaption(image.id, e.target.value)}
+                          className="w-full px-3 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          placeholder="Caption"
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {image.file.name}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeNewGalleryImage(image.id)}
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded-md h-fit"
+                        title="Remove new image"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Info Preview */}

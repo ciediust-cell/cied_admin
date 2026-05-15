@@ -9,6 +9,10 @@ import { NewsListPage } from "./pages/NewsListPage";
 import NewsFormPage from "./pages/NewsFormPage";
 import { EventsListPage } from "./pages/EventsListPage";
 import EventsFormPage from "./pages/EventsFormPage";
+import { WorkshopsListPage } from "./pages/WorkshopsListPage";
+import WorkshopFormPage from "./pages/WorkshopFormPage";
+import { FacilitiesListPage } from "./pages/FacilitiesListPage";
+import FacilityFormPage from "./pages/FacilityFormPage";
 import { ProgramsListPage } from "./pages/ProgramsListPage";
 import ProgramFormPage from "./pages/ProgramFormPage";
 import GalleryListPage from "./pages/GalleryListPage";
@@ -21,6 +25,9 @@ import MemberFormPage from "./pages/MemberFormPage";
 import { EnquiriesListPage } from "./pages/EnquiriesListPage";
 import { AwardsListPage } from "./pages/AwardsListPage";
 import AwardsFormPage from "./pages/AwardsFormPage";
+import { CollaboratorsListPage } from "./pages/CollaboratorsListPage";
+import CollaboratorFormPage from "./pages/CollaboratorFormPage";
+import { BoardMessagePage } from "./pages/BoardMessagePage";
 import { SettingsProfilePage } from "./pages/SettingsProfilePage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import { Toaster } from "react-hot-toast";
@@ -45,8 +52,9 @@ export default function App() {
         if (!mounted) return;
         logout();
       } finally {
-        if (!mounted) return;
-        setAuthReady(true);
+        if (mounted) {
+          setAuthReady(true);
+        }
       }
     };
 
@@ -110,6 +118,28 @@ export default function App() {
             element={<EventsFormPage mode="edit" />}
           />
 
+          {/* Workshops */}
+          <Route path="workshops" element={<WorkshopsListPage />} />
+          <Route
+            path="workshops/createWorkshop"
+            element={<WorkshopFormPage mode="create" />}
+          />
+          <Route
+            path="workshops/:workshopId/edit"
+            element={<WorkshopFormPage mode="edit" />}
+          />
+
+          {/* Facilities */}
+          <Route path="facilities" element={<FacilitiesListPage />} />
+          <Route
+            path="facilities/new"
+            element={<FacilityFormPage mode="create" />}
+          />
+          <Route
+            path="facilities/:facilityId/edit"
+            element={<FacilityFormPage mode="edit" />}
+          />
+
           {/* Programs */}
           <Route path="programs" element={<ProgramsListPage />} />
           <Route
@@ -161,6 +191,20 @@ export default function App() {
             path="awards/:awardId/edit"
             element={<AwardsFormPage mode="edit" />}
           />
+
+          {/* Collaborators */}
+          <Route path="collaborators" element={<CollaboratorsListPage />} />
+          <Route
+            path="collaborators/new"
+            element={<CollaboratorFormPage mode="create" />}
+          />
+          <Route
+            path="collaborators/:collaboratorId/edit"
+            element={<CollaboratorFormPage mode="edit" />}
+          />
+
+          {/* Board */}
+          <Route path="board-message" element={<BoardMessagePage />} />
 
           {/* Settings */}
           <Route path="settings" element={<SettingsProfilePage />} />

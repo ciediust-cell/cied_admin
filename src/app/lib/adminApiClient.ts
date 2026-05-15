@@ -543,6 +543,86 @@ export interface EventDetailResponse {
   registrationUrl?: string | null;
   featuredImage?: string | null;
   isPublished: boolean;
+  images?: EventImageResponse[];
+}
+
+export interface EventImageResponse {
+  id: string;
+  imageUrl: string;
+  publicId?: string | null;
+  caption?: string | null;
+  order?: number;
+}
+
+export interface WorkshopImageResponse {
+  id: string;
+  imageUrl: string;
+  publicId?: string | null;
+  caption?: string | null;
+  order?: number;
+}
+
+export interface WorkshopItemResponse {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  workshopDate: string;
+  venue: string;
+  speakerName: string;
+  speakerDesignation?: string | null;
+  speakerBio?: string | null;
+  registrationUrl?: string | null;
+  referenceUrl?: string | null;
+  isPublished: boolean;
+  publishedAt?: string | null;
+  order: number;
+  updatedAt: string;
+  images: WorkshopImageResponse[];
+}
+
+export interface WorkshopDetailResponse extends WorkshopItemResponse {
+  description: string;
+  speakerBio?: string | null;
+  registrationUrl?: string | null;
+  referenceUrl?: string | null;
+  publishedAt?: string | null;
+}
+
+export interface WorkshopToggleResponse {
+  workshop: {
+    isPublished: boolean;
+  };
+}
+
+export interface FacilityImageResponse {
+  id: string;
+  imageUrl: string;
+  publicId?: string | null;
+  caption?: string | null;
+  order?: number;
+}
+
+export interface FacilityItemResponse {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  purpose?: string | null;
+  resources: string[];
+  usageDetails?: string | null;
+  isActive: boolean;
+  order: number;
+  updatedAt: string;
+  images: FacilityImageResponse[];
+}
+
+export type FacilityDetailResponse = FacilityItemResponse;
+
+export interface FacilityToggleResponse {
+  facility: {
+    isActive: boolean;
+  };
 }
 
 export interface ProgramItemResponse {
@@ -551,6 +631,7 @@ export interface ProgramItemResponse {
   shortDescription: string;
   duration: string;
   eligibility: string;
+  bannerImage?: string | null;
   applyEnabled: boolean;
   isActive: boolean;
   updatedAt: string;
@@ -565,6 +646,29 @@ export interface ProgramApplicationStepResponse {
   description: string;
 }
 
+export interface ProgramDocumentResponse {
+  id: string;
+  title: string;
+  fileUrl: string;
+  publicId?: string | null;
+  order?: number;
+}
+
+export interface ProgramSuccessStoryResponse {
+  id: string;
+  participantName: string;
+  participantRole: string;
+  storyTitle: string;
+  successStory: string;
+  achievementHighlights: string;
+  startupOutcome: string;
+  testimonial?: string | null;
+  imageUrl?: string | null;
+  imagePublicId?: string | null;
+  order?: number;
+  isActive: boolean;
+}
+
 export interface ProgramDetailResponse {
   id: string;
   title: string | null;
@@ -573,10 +677,13 @@ export interface ProgramDetailResponse {
   duration?: string | null;
   eligibility?: string | null;
   icon?: string | null;
+  bannerImage?: string | null;
   applyEnabled: boolean;
   applyUrl?: string | null;
   highlights?: ProgramHighlightResponse[];
   applicationSteps?: ProgramApplicationStepResponse[];
+  documents?: ProgramDocumentResponse[];
+  successStories?: ProgramSuccessStoryResponse[];
 }
 
 export interface ProgramToggleResponse {
@@ -696,17 +803,26 @@ export interface PortfolioAchievementResponse {
   text: string;
 }
 
+export interface PortfolioAwardImageResponse {
+  id: string;
+  imageUrl: string;
+  publicId?: string | null;
+  caption?: string | null;
+  order?: number;
+}
+
 export interface PortfolioItemResponse {
   id: string;
   name: string;
   tagline: string;
   description?: string;
   logo: string;
-  websiteUrl?: string;
+  websiteUrl?: string | null;
   stage: StartupStage;
   sectors: StartupSector[];
   founders: PortfolioFounderResponse[];
   achievements: PortfolioAchievementResponse[];
+  awardImages?: PortfolioAwardImageResponse[];
   isActive: boolean;
 }
 
@@ -729,6 +845,40 @@ export interface AwardUpsertPayload {
   description: string;
   isActive: boolean;
   order?: number;
+}
+
+export interface CollaboratorResponse {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl?: string | null;
+  logoPublicId?: string | null;
+  websiteUrl?: string | null;
+  mouUrl?: string | null;
+  mouPublicId?: string | null;
+  order: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BoardMessageResponse {
+  id: string;
+  title: string;
+  message: string;
+  authorName: string | null;
+  authorDesignation: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoardMessageUpsertPayload {
+  title: string;
+  message: string;
+  authorName?: string;
+  authorDesignation?: string;
+  isActive: boolean;
 }
 
 const MEMBER_ROLES: ReadonlySet<MemberRole> = new Set([
@@ -810,6 +960,157 @@ function isEventListResponse(payload: unknown): payload is EventItemResponse[] {
   return Array.isArray(payload) && payload.every(isEventItemResponse);
 }
 
+function isWorkshopImageResponse(payload: unknown): payload is WorkshopImageResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.imageUrl)) return false;
+  if (payload.publicId !== undefined && payload.publicId !== null && !isString(payload.publicId)) {
+    return false;
+  }
+  if (payload.caption !== undefined && payload.caption !== null && !isString(payload.caption)) {
+    return false;
+  }
+  if (payload.order !== undefined && !isNumber(payload.order)) return false;
+  return true;
+}
+
+function isWorkshopItemResponse(payload: unknown): payload is WorkshopItemResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.title)) return false;
+  if (!isString(payload.slug)) return false;
+  if (!isString(payload.description)) return false;
+  if (!isString(payload.workshopDate)) return false;
+  if (!isString(payload.venue)) return false;
+  if (!isString(payload.speakerName)) return false;
+  if (
+    payload.speakerDesignation !== undefined &&
+    payload.speakerDesignation !== null &&
+    !isString(payload.speakerDesignation)
+  ) {
+    return false;
+  }
+  if (payload.speakerBio !== undefined && payload.speakerBio !== null && !isString(payload.speakerBio)) {
+    return false;
+  }
+  if (
+    payload.registrationUrl !== undefined &&
+    payload.registrationUrl !== null &&
+    !isString(payload.registrationUrl)
+  ) {
+    return false;
+  }
+  if (
+    payload.referenceUrl !== undefined &&
+    payload.referenceUrl !== null &&
+    !isString(payload.referenceUrl)
+  ) {
+    return false;
+  }
+  if (!isBoolean(payload.isPublished)) return false;
+  if (payload.publishedAt !== undefined && payload.publishedAt !== null && !isString(payload.publishedAt)) {
+    return false;
+  }
+  if (!isNumber(payload.order)) return false;
+  if (!isString(payload.updatedAt)) return false;
+  if (!Array.isArray(payload.images) || !payload.images.every(isWorkshopImageResponse)) {
+    return false;
+  }
+  return true;
+}
+
+function isWorkshopDetailResponse(payload: unknown): payload is WorkshopDetailResponse {
+  if (!isWorkshopItemResponse(payload)) return false;
+  if (!isString(payload.description)) return false;
+  if (payload.speakerBio !== undefined && payload.speakerBio !== null && !isString(payload.speakerBio)) {
+    return false;
+  }
+  if (
+    payload.registrationUrl !== undefined &&
+    payload.registrationUrl !== null &&
+    !isString(payload.registrationUrl)
+  ) {
+    return false;
+  }
+  if (
+    payload.referenceUrl !== undefined &&
+    payload.referenceUrl !== null &&
+    !isString(payload.referenceUrl)
+  ) {
+    return false;
+  }
+  if (payload.publishedAt !== undefined && payload.publishedAt !== null && !isString(payload.publishedAt)) {
+    return false;
+  }
+  return true;
+}
+
+function isWorkshopListResponse(payload: unknown): payload is WorkshopItemResponse[] {
+  return Array.isArray(payload) && payload.every(isWorkshopItemResponse);
+}
+
+function isWorkshopToggleResponse(payload: unknown): payload is WorkshopToggleResponse {
+  if (!isRecord(payload)) return false;
+  if (!isRecord(payload.workshop)) return false;
+  return isBoolean(payload.workshop.isPublished);
+}
+
+function isFacilityImageResponse(payload: unknown): payload is FacilityImageResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.imageUrl)) return false;
+  if (payload.publicId !== undefined && payload.publicId !== null && !isString(payload.publicId)) {
+    return false;
+  }
+  if (payload.caption !== undefined && payload.caption !== null && !isString(payload.caption)) {
+    return false;
+  }
+  if (payload.order !== undefined && !isNumber(payload.order)) return false;
+  return true;
+}
+
+function isFacilityItemResponse(payload: unknown): payload is FacilityItemResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.name)) return false;
+  if (!isString(payload.slug)) return false;
+  if (!isString(payload.description)) return false;
+  if (payload.purpose !== undefined && payload.purpose !== null && !isString(payload.purpose)) {
+    return false;
+  }
+  if (!Array.isArray(payload.resources) || !payload.resources.every(isString)) {
+    return false;
+  }
+  if (
+    payload.usageDetails !== undefined &&
+    payload.usageDetails !== null &&
+    !isString(payload.usageDetails)
+  ) {
+    return false;
+  }
+  if (!isBoolean(payload.isActive)) return false;
+  if (!isNumber(payload.order)) return false;
+  if (!isString(payload.updatedAt)) return false;
+  if (!Array.isArray(payload.images) || !payload.images.every(isFacilityImageResponse)) {
+    return false;
+  }
+  return true;
+}
+
+function isFacilityDetailResponse(payload: unknown): payload is FacilityDetailResponse {
+  return isFacilityItemResponse(payload);
+}
+
+function isFacilityListResponse(payload: unknown): payload is FacilityItemResponse[] {
+  return Array.isArray(payload) && payload.every(isFacilityItemResponse);
+}
+
+function isFacilityToggleResponse(payload: unknown): payload is FacilityToggleResponse {
+  if (!isRecord(payload)) return false;
+  if (!isRecord(payload.facility)) return false;
+  return isBoolean(payload.facility.isActive);
+}
+
 function isEventDetailResponse(payload: unknown): payload is EventDetailResponse {
   if (!isRecord(payload)) return false;
   if (!isString(payload.id)) return false;
@@ -850,6 +1151,21 @@ function isEventDetailResponse(payload: unknown): payload is EventDetailResponse
   ) {
     return false;
   }
+  if (payload.images !== undefined) {
+    if (!Array.isArray(payload.images)) return false;
+    for (const image of payload.images) {
+      if (!isRecord(image)) return false;
+      if (!isString(image.id)) return false;
+      if (!isString(image.imageUrl)) return false;
+      if (image.publicId !== undefined && image.publicId !== null && !isString(image.publicId)) {
+        return false;
+      }
+      if (image.caption !== undefined && image.caption !== null && !isString(image.caption)) {
+        return false;
+      }
+      if (image.order !== undefined && !isNumber(image.order)) return false;
+    }
+  }
   return true;
 }
 
@@ -881,6 +1197,57 @@ function isProgramApplicationStepResponse(
   if (!isRecord(payload)) return false;
   if (!isString(payload.description)) return false;
   if (payload.stepNumber !== undefined && !isNumber(payload.stepNumber)) {
+    return false;
+  }
+  return true;
+}
+
+function isProgramDocumentResponse(payload: unknown): payload is ProgramDocumentResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.title)) return false;
+  if (!isString(payload.fileUrl)) return false;
+  if (
+    payload.publicId !== undefined &&
+    payload.publicId !== null &&
+    !isString(payload.publicId)
+  ) {
+    return false;
+  }
+  if (payload.order !== undefined && !isNumber(payload.order)) {
+    return false;
+  }
+  return true;
+}
+
+function isProgramSuccessStoryResponse(
+  payload: unknown,
+): payload is ProgramSuccessStoryResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.participantName)) return false;
+  if (!isString(payload.participantRole)) return false;
+  if (!isString(payload.storyTitle)) return false;
+  if (!isString(payload.successStory)) return false;
+  if (!isString(payload.achievementHighlights)) return false;
+  if (!isString(payload.startupOutcome)) return false;
+  if (payload.testimonial !== undefined && payload.testimonial !== null && !isString(payload.testimonial)) {
+    return false;
+  }
+  if (payload.imageUrl !== undefined && payload.imageUrl !== null && !isString(payload.imageUrl)) {
+    return false;
+  }
+  if (
+    payload.imagePublicId !== undefined &&
+    payload.imagePublicId !== null &&
+    !isString(payload.imagePublicId)
+  ) {
+    return false;
+  }
+  if (payload.order !== undefined && !isNumber(payload.order)) {
+    return false;
+  }
+  if (!isBoolean(payload.isActive)) {
     return false;
   }
   return true;
@@ -920,6 +1287,13 @@ function isProgramDetailResponse(payload: unknown): payload is ProgramDetailResp
   ) {
     return false;
   }
+  if (
+    payload.bannerImage !== undefined &&
+    payload.bannerImage !== null &&
+    !isString(payload.bannerImage)
+  ) {
+    return false;
+  }
   if (payload.icon !== undefined && payload.icon !== null && !isString(payload.icon)) {
     return false;
   }
@@ -941,6 +1315,20 @@ function isProgramDetailResponse(payload: unknown): payload is ProgramDetailResp
     payload.applicationSteps !== undefined &&
     (!Array.isArray(payload.applicationSteps) ||
       !payload.applicationSteps.every(isProgramApplicationStepResponse))
+  ) {
+    return false;
+  }
+  if (
+    payload.documents !== undefined &&
+    (!Array.isArray(payload.documents) ||
+      !payload.documents.every(isProgramDocumentResponse))
+  ) {
+    return false;
+  }
+  if (
+    payload.successStories !== undefined &&
+    (!Array.isArray(payload.successStories) ||
+      !payload.successStories.every(isProgramSuccessStoryResponse))
   ) {
     return false;
   }
@@ -1112,6 +1500,30 @@ function isPortfolioAchievementResponse(
   return isRecord(payload) && isString(payload.id) && isString(payload.text);
 }
 
+function isPortfolioAwardImageResponse(
+  payload: unknown,
+): payload is PortfolioAwardImageResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.imageUrl)) return false;
+  if (
+    payload.publicId !== undefined &&
+    payload.publicId !== null &&
+    !isString(payload.publicId)
+  ) {
+    return false;
+  }
+  if (
+    payload.caption !== undefined &&
+    payload.caption !== null &&
+    !isString(payload.caption)
+  ) {
+    return false;
+  }
+  if (payload.order !== undefined && !isNumber(payload.order)) return false;
+  return true;
+}
+
 function isPortfolioItemResponse(payload: unknown): payload is PortfolioItemResponse {
   if (!isRecord(payload)) return false;
   if (!isString(payload.id)) return false;
@@ -1123,7 +1535,13 @@ function isPortfolioItemResponse(payload: unknown): payload is PortfolioItemResp
     return false;
   }
   if (payload.description !== undefined && !isString(payload.description)) return false;
-  if (payload.websiteUrl !== undefined && !isString(payload.websiteUrl)) return false;
+  if (
+    payload.websiteUrl !== undefined &&
+    payload.websiteUrl !== null &&
+    !isString(payload.websiteUrl)
+  ) {
+    return false;
+  }
   if (
     !Array.isArray(payload.sectors) ||
     !payload.sectors.every(
@@ -1138,6 +1556,13 @@ function isPortfolioItemResponse(payload: unknown): payload is PortfolioItemResp
   if (
     !Array.isArray(payload.achievements) ||
     !payload.achievements.every(isPortfolioAchievementResponse)
+  ) {
+    return false;
+  }
+  if (
+    payload.awardImages !== undefined &&
+    (!Array.isArray(payload.awardImages) ||
+      !payload.awardImages.every(isPortfolioAwardImageResponse))
   ) {
     return false;
   }
@@ -1179,6 +1604,74 @@ function isAwardsResponse(payload: unknown): payload is AwardResponse[] {
   return Array.isArray(payload) && payload.every(isAwardResponse);
 }
 
+function isCollaboratorResponse(payload: unknown): payload is CollaboratorResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.name)) return false;
+  if (!isString(payload.slug)) return false;
+  if (!isNumber(payload.order)) return false;
+  if (!isBoolean(payload.isActive)) return false;
+  if (payload.logoUrl !== undefined && payload.logoUrl !== null && !isString(payload.logoUrl)) {
+    return false;
+  }
+  if (
+    payload.logoPublicId !== undefined &&
+    payload.logoPublicId !== null &&
+    !isString(payload.logoPublicId)
+  ) {
+    return false;
+  }
+  if (
+    payload.websiteUrl !== undefined &&
+    payload.websiteUrl !== null &&
+    !isString(payload.websiteUrl)
+  ) {
+    return false;
+  }
+  if (payload.mouUrl !== undefined && payload.mouUrl !== null && !isString(payload.mouUrl)) {
+    return false;
+  }
+  if (
+    payload.mouPublicId !== undefined &&
+    payload.mouPublicId !== null &&
+    !isString(payload.mouPublicId)
+  ) {
+    return false;
+  }
+  if (payload.createdAt !== undefined && !isString(payload.createdAt)) return false;
+  if (payload.updatedAt !== undefined && !isString(payload.updatedAt)) return false;
+  return true;
+}
+
+function isCollaboratorListResponse(payload: unknown): payload is CollaboratorResponse[] {
+  return Array.isArray(payload) && payload.every(isCollaboratorResponse);
+}
+
+function isBoardMessageResponse(payload: unknown): payload is BoardMessageResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.title)) return false;
+  if (!isString(payload.message)) return false;
+  if (
+    payload.authorName !== undefined &&
+    payload.authorName !== null &&
+    !isString(payload.authorName)
+  ) {
+    return false;
+  }
+  if (
+    payload.authorDesignation !== undefined &&
+    payload.authorDesignation !== null &&
+    !isString(payload.authorDesignation)
+  ) {
+    return false;
+  }
+  if (!isBoolean(payload.isActive)) return false;
+  if (!isString(payload.createdAt)) return false;
+  if (!isString(payload.updatedAt)) return false;
+  return true;
+}
+
 function isPaginationMeta(payload: unknown): payload is PaginationMeta {
   if (!isRecord(payload)) return false;
   return (
@@ -1213,6 +1706,8 @@ const isPaginatedNewsListResponse =
   createPaginatedResponseValidator<NewsItemResponse>(isNewsItemResponse);
 const isPaginatedEventListResponse =
   createPaginatedResponseValidator<EventItemResponse>(isEventItemResponse);
+const isPaginatedFacilityListResponse =
+  createPaginatedResponseValidator<FacilityItemResponse>(isFacilityItemResponse);
 const isPaginatedProgramListResponse =
   createPaginatedResponseValidator<ProgramItemResponse>(isProgramItemResponse);
 const isPaginatedMemberListResponse =
@@ -1223,6 +1718,8 @@ const isPaginatedPortfolioListResponse =
   createPaginatedResponseValidator<PortfolioItemResponse>(isPortfolioItemResponse);
 const isPaginatedAwardListResponse =
   createPaginatedResponseValidator<AwardResponse>(isAwardResponse);
+const isPaginatedCollaboratorListResponse =
+  createPaginatedResponseValidator<CollaboratorResponse>(isCollaboratorResponse);
 const isPaginatedEnquiryListResponse =
   createPaginatedResponseValidator<EnquiryResponse>(isEnquiryResponse);
 
@@ -1297,6 +1794,140 @@ export async function getAdminEventsPaginated(params: {
   );
 }
 
+export async function getAdminWorkshops(): Promise<WorkshopItemResponse[]> {
+  return request(
+    "/workshops",
+    { method: "GET" },
+    isWorkshopListResponse,
+    "Invalid workshops response format",
+  );
+}
+
+export async function getAdminWorkshopsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<WorkshopItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/workshops?${query}`,
+    { method: "GET" },
+    createPaginatedResponseValidator<WorkshopItemResponse>(isWorkshopItemResponse),
+    "Invalid paginated workshops response format",
+  );
+}
+
+export async function getAdminWorkshopById(id: string): Promise<WorkshopDetailResponse> {
+  return request(
+    `/workshops/${id}`,
+    { method: "GET" },
+    isWorkshopDetailResponse,
+    "Invalid workshop response format",
+  );
+}
+
+export async function createAdminWorkshop(formData: FormData): Promise<void> {
+  await request(
+    "/workshops",
+    { method: "POST", body: formData },
+    null,
+    "Invalid workshop create response format",
+  );
+}
+
+export async function updateAdminWorkshop(id: string, formData: FormData): Promise<void> {
+  await request(
+    `/workshops/${id}`,
+    { method: "PUT", body: formData },
+    null,
+    "Invalid workshop update response format",
+  );
+}
+
+export async function deleteAdminWorkshop(id: string): Promise<void> {
+  await request(
+    `/workshops/${id}`,
+    { method: "DELETE" },
+    null,
+    "Invalid workshop delete response format",
+  );
+}
+
+export async function toggleAdminWorkshopStatus(id: string): Promise<WorkshopToggleResponse> {
+  return request(
+    `/workshops/${id}/toggle`,
+    { method: "PATCH" },
+    isWorkshopToggleResponse,
+    "Invalid workshop toggle response format",
+  );
+}
+
+export async function getAdminFacilities(): Promise<FacilityItemResponse[]> {
+  return request(
+    "/facilities",
+    { method: "GET" },
+    isFacilityListResponse,
+    "Invalid facilities response format",
+  );
+}
+
+export async function getAdminFacilitiesPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<FacilityItemResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/facilities?${query}`,
+    { method: "GET" },
+    isPaginatedFacilityListResponse,
+    "Invalid paginated facilities response format",
+  );
+}
+
+export async function getAdminFacilityById(id: string): Promise<FacilityDetailResponse> {
+  return request(
+    `/facilities/${id}`,
+    { method: "GET" },
+    isFacilityDetailResponse,
+    "Invalid facility response format",
+  );
+}
+
+export async function createAdminFacility(formData: FormData): Promise<void> {
+  await request(
+    "/facilities",
+    { method: "POST", body: formData },
+    null,
+    "Invalid facility create response format",
+  );
+}
+
+export async function updateAdminFacility(id: string, formData: FormData): Promise<void> {
+  await request(
+    `/facilities/${id}`,
+    { method: "PUT", body: formData },
+    null,
+    "Invalid facility update response format",
+  );
+}
+
+export async function deleteAdminFacility(id: string): Promise<void> {
+  await request(
+    `/facilities/${id}`,
+    { method: "DELETE" },
+    null,
+    "Invalid facility delete response format",
+  );
+}
+
+export async function toggleAdminFacilityStatus(id: string): Promise<FacilityToggleResponse> {
+  return request(
+    `/facilities/${id}/toggle`,
+    { method: "PATCH" },
+    isFacilityToggleResponse,
+    "Invalid facility toggle response format",
+  );
+}
+
 export async function getAdminEventById(id: string): Promise<EventDetailResponse> {
   return request(
     `/events/${id}`,
@@ -1364,14 +1995,10 @@ export async function getAdminProgramById(id: string): Promise<ProgramDetailResp
   );
 }
 
-export async function createAdminProgram(payload: ProgramUpsertPayload): Promise<void> {
+export async function createAdminProgram(formData: FormData): Promise<void> {
   await request(
     "/programs",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
+    { method: "POST", body: formData },
     null,
     "Invalid program create response format",
   );
@@ -1379,15 +2006,11 @@ export async function createAdminProgram(payload: ProgramUpsertPayload): Promise
 
 export async function updateAdminProgram(
   id: string,
-  payload: ProgramUpsertPayload,
+  formData: FormData,
 ): Promise<void> {
   await request(
     `/programs/${id}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
+    { method: "PUT", body: formData },
     null,
     "Invalid program update response format",
   );
@@ -1733,5 +2356,95 @@ export async function deleteAdminAward(id: string): Promise<void> {
     { method: "DELETE" },
     null,
     "Invalid award delete response format",
+  );
+}
+
+export async function getAdminCollaborators(): Promise<CollaboratorResponse[]> {
+  return request(
+    "/collaborators",
+    { method: "GET" },
+    isCollaboratorListResponse,
+    "Invalid collaborators response format",
+  );
+}
+
+export async function getAdminCollaboratorsPaginated(params: {
+  page: number;
+  limit: number;
+}): Promise<PaginatedResponse<CollaboratorResponse>> {
+  const query = buildPaginationQuery(params);
+  return request(
+    `/collaborators?${query}`,
+    { method: "GET" },
+    isPaginatedCollaboratorListResponse,
+    "Invalid paginated collaborators response format",
+  );
+}
+
+export async function getAdminCollaboratorById(
+  id: string,
+): Promise<CollaboratorResponse> {
+  return request(
+    `/collaborators/${id}`,
+    { method: "GET" },
+    isCollaboratorResponse,
+    "Invalid collaborator response format",
+  );
+}
+
+export async function createAdminCollaborator(
+  formData: FormData,
+): Promise<CollaboratorResponse> {
+  return request(
+    "/collaborators",
+    { method: "POST", body: formData },
+    isCollaboratorResponse,
+    "Invalid collaborator create response format",
+  );
+}
+
+export async function updateAdminCollaborator(
+  id: string,
+  formData: FormData,
+): Promise<CollaboratorResponse> {
+  return request(
+    `/collaborators/${id}`,
+    { method: "PATCH", body: formData },
+    isCollaboratorResponse,
+    "Invalid collaborator update response format",
+  );
+}
+
+export async function deleteAdminCollaborator(id: string): Promise<void> {
+  await request(
+    `/collaborators/${id}`,
+    { method: "DELETE" },
+    null,
+    "Invalid collaborator delete response format",
+  );
+}
+
+export async function getAdminBoardMessage(): Promise<BoardMessageResponse | null> {
+  return request(
+    "/board-message",
+    { method: "GET" },
+    (payload: unknown): payload is BoardMessageResponse | null =>
+      payload === null || isBoardMessageResponse(payload),
+    "Invalid board message response format",
+  );
+}
+
+export async function saveAdminBoardMessage(
+  payload: BoardMessageUpsertPayload,
+): Promise<BoardMessageResponse> {
+  return request(
+    "/board-message",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    isBoardMessageResponse,
+    "Invalid board message save response format",
   );
 }

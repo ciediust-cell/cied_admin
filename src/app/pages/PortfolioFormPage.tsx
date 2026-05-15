@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Upload, X, Save, ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
@@ -33,6 +33,18 @@ const SECTOR_OPTIONS: { label: string; value: StartupSector }[] = [
   { label: "Social Impact", value: "SOCIAL_IMPACT" },
 ];
 
+interface ExistingAwardImageDraft {
+  id: string;
+  imageUrl: string;
+  caption: string;
+}
+
+interface NewAwardImageDraft {
+  file: File;
+  previewUrl: string;
+  caption: string;
+}
+
 export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
   const navigate = useNavigate();
   const { portfolioId } = useParams();
@@ -52,6 +64,23 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [currentLogo, setCurrentLogo] = useState("");
+  const [existingAwardImages, setExistingAwardImages] = useState<
+    ExistingAwardImageDraft[]
+  >([]);
+  const [newAwardImages, setNewAwardImages] = useState<NewAwardImageDraft[]>([]);
+  const newAwardImagesRef = useRef<NewAwardImageDraft[]>([]);
+
+  useEffect(() => {
+    newAwardImagesRef.current = newAwardImages;
+  }, [newAwardImages]);
+
+  useEffect(() => {
+    return () => {
+      newAwardImagesRef.current.forEach((image) =>
+        URL.revokeObjectURL(image.previewUrl),
+      );
+    };
+  }, []);
 
   useEffect(() => {
     if (mode !== "edit" || !portfolioId || !accessToken) return;
@@ -85,6 +114,13 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
         );
         setCurrentLogo(item.logo || "");
         setLogoPreview(item.logo || null);
+        setExistingAwardImages(
+          (item.awardImages || []).map((image) => ({
+            id: image.id,
+            imageUrl: image.imageUrl,
+            caption: image.caption || "",
+          })),
+        );
       } catch (error: unknown) {
         toast.error(getErrorMessage(error, "Failed to load startup"));
       } finally {
@@ -108,6 +144,22 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
     reader.readAsDataURL(file);
   };
 
+  const handleAwardImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setNewAwardImages((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        caption: "",
+      })),
+    ]);
+
+    e.target.value = "";
+  };
+
   const handleRemoveLogo = () => {
     if (logoFile) {
       setLogoFile(null);
@@ -118,6 +170,34 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
     if (mode === "create") {
       setLogoPreview(null);
     }
+  };
+
+  const updateExistingAwardCaption = (id: string, caption: string) => {
+    setExistingAwardImages((prev) =>
+      prev.map((image) => (image.id === id ? { ...image, caption } : image)),
+    );
+  };
+
+  const removeExistingAwardImage = (id: string) => {
+    setExistingAwardImages((prev) => prev.filter((image) => image.id !== id));
+  };
+
+  const updateNewAwardCaption = (index: number, caption: string) => {
+    setNewAwardImages((prev) =>
+      prev.map((image, imageIndex) =>
+        imageIndex === index ? { ...image, caption } : image,
+      ),
+    );
+  };
+
+  const removeNewAwardImage = (index: number) => {
+    setNewAwardImages((prev) => {
+      const image = prev[index];
+      if (image) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+      return prev.filter((_, imageIndex) => imageIndex !== index);
+    });
   };
 
   const handleSectorToggle = (value: StartupSector) => {
@@ -225,6 +305,14 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
       achievementsClean.forEach((achievement) =>
         formData.append("achievements[]", achievement),
       );
+      existingAwardImages.forEach((image) => {
+        formData.append("existingAwardImageIds[]", image.id);
+        formData.append("existingAwardImageCaptions[]", image.caption.trim());
+      });
+      newAwardImages.forEach((image) => {
+        formData.append("awardImages", image.file);
+        formData.append("awardImageCaptions[]", image.caption.trim());
+      });
 
       if (logoFile) {
         // Backend upload middleware expects this field name.
@@ -467,6 +555,98 @@ export default function PortfolioFormPage({ mode }: PortfolioFormPageProps) {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-foreground">Achievement Gallery</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Upload award photos, certificates, and recognition images.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity cursor-pointer">
+                  <Upload className="w-4 h-4" />
+                  Add Images
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAwardImagesUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {existingAwardImages.length === 0 && newAwardImages.length === 0 ? (
+                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
+                  No achievement images selected.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {existingAwardImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className="border border-border rounded-lg overflow-hidden bg-background"
+                    >
+                      <div className="relative">
+                        <img
+                          src={image.imageUrl}
+                          alt={image.caption || "Achievement image"}
+                          className="w-full aspect-video object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeExistingAwardImage(image.id)}
+                          className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full hover:opacity-90 transition-opacity"
+                          title="Remove image"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={image.caption}
+                        onChange={(e) =>
+                          updateExistingAwardCaption(image.id, e.target.value)
+                        }
+                        className="w-full px-3 py-2 bg-input-background border-t border-border focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Optional caption"
+                      />
+                    </div>
+                  ))}
+
+                  {newAwardImages.map((image, index) => (
+                    <div
+                      key={image.previewUrl}
+                      className="border border-border rounded-lg overflow-hidden bg-background"
+                    >
+                      <div className="relative">
+                        <img
+                          src={image.previewUrl}
+                          alt={image.caption || "New achievement image"}
+                          className="w-full aspect-video object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeNewAwardImage(index)}
+                          className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full hover:opacity-90 transition-opacity"
+                          title="Remove image"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={image.caption}
+                        onChange={(e) => updateNewAwardCaption(index, e.target.value)}
+                        className="w-full px-3 py-2 bg-input-background border-t border-border focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Optional caption"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
