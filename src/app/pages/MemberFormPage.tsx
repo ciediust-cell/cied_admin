@@ -36,7 +36,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
 
   const [name, setName] = useState("");
   const [designation, setDesignation] = useState("");
-  const [role, setRole] = useState<MemberRole>("MANAGEMENT");
+  const [role, setRole] = useState<MemberRole | "">("");
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -59,7 +59,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
 
         setName(data.name || "");
         setDesignation(data.designation || "");
-        setRole(data.role || "MANAGEMENT");
+        setRole(data.role || "");
         setDescription(data.description || "");
         setEmail(data.email || "");
         setLinkedinUrl(data.linkedinUrl || "");
@@ -159,7 +159,7 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
       const payload: MemberUpsertPayload = {
         name: name.trim(),
         designation: designation.trim(),
-        role,
+        role: role as MemberRole,
         isActive,
       };
 
@@ -277,6 +277,9 @@ export default function MemberFormPage({ mode }: MemberFormPageProps) {
                     className="w-full px-4 py-2 bg-input-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     required
                   >
+                    <option value="" disabled>
+                      Select role
+                    </option>
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
