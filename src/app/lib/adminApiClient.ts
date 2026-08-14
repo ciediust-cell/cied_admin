@@ -881,6 +881,37 @@ export interface BoardMessageUpsertPayload {
   isActive: boolean;
 }
 
+export interface HomepageStatResponse {
+  id: string;
+  key: string;
+  label: string;
+  prefix: string | null;
+  value: number;
+  decimals: number;
+  suffix: string | null;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HomepageStatUpsertPayload {
+  id?: string;
+  key?: string;
+  label: string;
+  prefix?: string | null;
+  value: number;
+  decimals: number;
+  suffix?: string | null;
+  order: number;
+  isActive: boolean;
+}
+
+export interface HomepageStatsSaveResponse {
+  message?: string;
+  stats: HomepageStatResponse[];
+}
+
 const MEMBER_ROLES: ReadonlySet<MemberRole> = new Set([
   "GOVERNANCE",
   "MANAGEMENT",
@@ -1672,6 +1703,34 @@ function isBoardMessageResponse(payload: unknown): payload is BoardMessageRespon
   return true;
 }
 
+function isHomepageStatResponse(payload: unknown): payload is HomepageStatResponse {
+  if (!isRecord(payload)) return false;
+  if (!isString(payload.id)) return false;
+  if (!isString(payload.key)) return false;
+  if (!isString(payload.label)) return false;
+  if (payload.prefix !== null && !isString(payload.prefix)) return false;
+  if (!isNumber(payload.value)) return false;
+  if (!isNumber(payload.decimals)) return false;
+  if (payload.suffix !== null && !isString(payload.suffix)) return false;
+  if (!isNumber(payload.order)) return false;
+  if (!isBoolean(payload.isActive)) return false;
+  if (!isString(payload.createdAt)) return false;
+  if (!isString(payload.updatedAt)) return false;
+  return true;
+}
+
+function isHomepageStatsResponse(payload: unknown): payload is HomepageStatResponse[] {
+  return Array.isArray(payload) && payload.every(isHomepageStatResponse);
+}
+
+function isHomepageStatsSaveResponse(
+  payload: unknown,
+): payload is HomepageStatsSaveResponse {
+  if (!isRecord(payload)) return false;
+  if (payload.message !== undefined && !isString(payload.message)) return false;
+  return isHomepageStatsResponse(payload.stats);
+}
+
 function isPaginationMeta(payload: unknown): payload is PaginationMeta {
   if (!isRecord(payload)) return false;
   return (
@@ -2446,5 +2505,29 @@ export async function saveAdminBoardMessage(
     },
     isBoardMessageResponse,
     "Invalid board message save response format",
+  );
+}
+
+export async function getAdminHomepageStats(): Promise<HomepageStatResponse[]> {
+  return request(
+    "/homepage-stats",
+    { method: "GET" },
+    isHomepageStatsResponse,
+    "Invalid homepage statistics response format",
+  );
+}
+
+export async function saveAdminHomepageStats(payload: {
+  stats: HomepageStatUpsertPayload[];
+}): Promise<HomepageStatsSaveResponse> {
+  return request(
+    "/homepage-stats",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    isHomepageStatsSaveResponse,
+    "Invalid homepage statistics save response format",
   );
 }

@@ -28,6 +28,7 @@ import AwardsFormPage from "./pages/AwardsFormPage";
 import { CollaboratorsListPage } from "./pages/CollaboratorsListPage";
 import CollaboratorFormPage from "./pages/CollaboratorFormPage";
 import { BoardMessagePage } from "./pages/BoardMessagePage";
+import { HomepageStatsPage } from "./pages/HomepageStatsPage";
 import { SettingsProfilePage } from "./pages/SettingsProfilePage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import { Toaster } from "react-hot-toast";
@@ -205,6 +206,9 @@ export default function App() {
 
           {/* Board */}
           <Route path="board-message" element={<BoardMessagePage />} />
+
+          {/* Homepage */}
+          <Route path="homepage-stats" element={<HomepageStatsPage />} />
 
           {/* Settings */}
           <Route path="settings" element={<SettingsProfilePage />} />

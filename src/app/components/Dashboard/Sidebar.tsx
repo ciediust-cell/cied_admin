@@ -13,6 +13,7 @@ import {
   Handshake,
   FileText,
   Building2,
+  BarChart3,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
@@ -95,6 +96,12 @@ const navItems: NavItem[] = [
     label: "Board Message",
     id: "board-message",
     to: "/dashboard/board-message",
+  },
+  {
+    icon: <BarChart3 className="w-5 h-5" />,
+    label: "Homepage Stats",
+    id: "homepage-stats",
+    to: "/dashboard/homepage-stats",
   },
   {
     icon: <MessageSquare className="w-5 h-5" />,
